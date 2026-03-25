@@ -194,19 +194,30 @@ function canDo(){if(!cu)return false;for(var i=0;i<arguments.length;i++)if(cu.ro
 function canManage(){return canDo('admin','finance_manager');}
 function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
 function logAct(msg){actLog.unshift({msg:msg,user:cu?cu.display:'?',time:now_()});if(actLog.length>200)actLog.pop();}
-function _saveLS(){try{localStorage.setItem('salty_corp',JSON.stringify({instantLoans:instantLoans,longTermLoans:longTermLoans,invoiceLoans:invoiceLoans,orderLoans:orderLoans,salaryLoans:salaryLoans,actLog:actLog}));}catch(e){}}
+function _saveLS(){try{localStorage.setItem('salty_corp',JSON.stringify({instantLoans:instantLoans,longTermLoans:longTermLoans,invoiceLoans:invoiceLoans,orderLoans:orderLoans,salaryLoans:salaryLoans,actLog:actLog,BRANCHES:BRANCHES,USERS:USERS}));}catch(e){}}
 function saveData(){_saveLS();if(!_fbReady||!_db)return;if(_saveTimer)clearTimeout(_saveTimer);_saveTimer=setTimeout(_pushToFirebase,1500);}
 function save(){saveData();}
-function _pushToFirebase(){if(!_fbReady||!_db)return;if(_isSaving){_pendingSave=true;return;}_isSaving=true;_db.collection('salty-corporate').doc('data').set({instantLoans:instantLoans,longTermLoans:longTermLoans,invoiceLoans:invoiceLoans,orderLoans:orderLoans,salaryLoans:salaryLoans,actLog:actLog.slice(0,100),ts:Date.now()}).then(function(){_isSaving=false;if(_pendingSave){_pendingSave=false;_pushToFirebase();}}).catch(function(e){_isSaving=false;toast('⚠️ Sync failed');});}
-function _loadFromFirebase(){if(!_fbReady||!_db)return;_db.collection('salty-corporate').doc('data').get().then(function(doc){if(doc.exists){var d=doc.data();if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;}_saveLS();if(cu&&window._currentTab)showTab(window._currentTab);_startListener();}).catch(function(){_startListener();});}
-function _startListener(){if(!_fbReady||!_db)return;_db.collection('salty-corporate').doc('data').onSnapshot(function(doc){if(!doc.exists)return;var d=doc.data();if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;_saveLS();if(cu&&!document.querySelector('.mo.op')&&window._currentTab)showTab(window._currentTab);},function(e){console.warn('Listener:',e);});}
+function _pushToFirebase(){if(!_fbReady||!_db)return;if(_isSaving){_pendingSave=true;return;}_isSaving=true;_db.collection('salty-corporate').doc('data').set({instantLoans:instantLoans,longTermLoans:longTermLoans,invoiceLoans:invoiceLoans,orderLoans:orderLoans,salaryLoans:salaryLoans,actLog:actLog.slice(0,100),BRANCHES:BRANCHES,USERS:USERS,ts:Date.now()}).then(function(){_isSaving=false;if(_pendingSave){_pendingSave=false;_pushToFirebase();}}).catch(function(e){_isSaving=false;toast('⚠️ Sync failed');});}
+function _loadFromFirebase(){if(!_fbReady||!_db)return;_db.collection('salty-corporate').doc('data').get().then(function(doc){if(doc.exists){var d=doc.data();if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k))USERS[k]=d.USERS[k];}}}  _saveLS();if(cu&&window._currentTab)showTab(window._currentTab);_startListener();}).catch(function(){_startListener();});}
+function _startListener(){if(!_fbReady||!_db)return;_db.collection('salty-corporate').doc('data').onSnapshot(function(doc){if(!doc.exists)return;var d=doc.data();if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k))USERS[k]=d.USERS[k];}}_saveLS();if(cu&&!document.querySelector('.mo.op')&&window._currentTab)showTab(window._currentTab);},function(e){console.warn('Listener:',e);});}
 function _uploadOnePhoto(dataUrl,filename){return new Promise(function(resolve){try{var fd=new FormData();fd.append('file',dataUrl);fd.append('upload_preset',CLOUDINARY_PRESET);fd.append('public_id',filename);fetch('https://api.cloudinary.com/v1_1/'+CLOUDINARY_CLOUD+'/image/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){d.secure_url?resolve(d.secure_url):resolve(null);}).catch(function(){resolve(null);});}catch(e){resolve(null);}});}
-function doLogin(){var u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;var user=USERS[u];if(!user||user.pass!==p){document.getElementById('lerr').style.display='block';return;}cu={username:u,display:user.display,role:user.role};document.getElementById('lerr').style.display='none';document.getElementById('ls').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('app').style.flexDirection='column';document.getElementById('tbrole').textContent=RLABELS[cu.role]||cu.role;document.getElementById('tbuser').textContent=cu.display;buildNav();try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;}}catch(e){}initFirebase();if(_fbReady)_loadFromFirebase();else setTimeout(function(){initFirebase();if(_fbReady)_loadFromFirebase();},2000);showHome();}
+function doLogin(){var u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;var user=USERS[u];if(!user||user.pass!==p){document.getElementById('lerr').style.display='block';return;}cu={username:u,display:user.display,role:user.role};document.getElementById('lerr').style.display='none';document.getElementById('ls').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('app').style.flexDirection='column';document.getElementById('tbrole').textContent=RLABELS[cu.role]||cu.role;document.getElementById('tbuser').textContent=cu.display;buildNav();try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k)&&k!=='admin')USERS[k]=d.USERS[k];}}}}catch(e){}initFirebase();if(_fbReady)_loadFromFirebase();else setTimeout(function(){initFirebase();if(_fbReady)_loadFromFirebase();},2000);showHome();}
 function quickLogin(u,p){document.getElementById('lu').value=u;document.getElementById('lp').value=p;doLogin();}
 function doLogout(){cu=null;window._currentTab=null;document.getElementById('app').style.display='none';document.getElementById('ls').style.display='flex';document.getElementById('lu').value='';document.getElementById('lp').value='';}
-function buildNav(){var tabs=canDo('admin','finance_manager')?[{id:'dashboard',label:'Dashboard'},{id:'instantloans',label:'⚡ Instant'},{id:'longtermloans',label:'💼 Long Term'},{id:'invoiceloans',label:'📄 Invoice'},{id:'orderloans',label:'📦 Order'},{id:'salaryloans',label:'👤 Salary'},{id:'reports',label:'📊 Reports'},{id:'activity',label:'Activity'}]:[{id:'dashboard',label:'Dashboard'},{id:'instantloans',label:'⚡ Instant'},{id:'longtermloans',label:'💼 Long Term'},{id:'invoiceloans',label:'📄 Invoice'},{id:'orderloans',label:'📦 Order'},{id:'salaryloans',label:'👤 Salary'}];var nav=document.getElementById('tbnav');nav.innerHTML='';tabs.forEach(function(t){var b=document.createElement('button');b.className='tn';b.id='nt-'+t.id;b.textContent=t.label;b.onclick=function(){showTab(t.id);};nav.appendChild(b);});}
+function buildNav(){
+  var tabs=[];
+  if(canDo('admin')){
+    tabs=[{id:'dashboard',label:'Dashboard'},{id:'instantloans',label:'⚡ Instant'},{id:'longtermloans',label:'💼 Long Term'},{id:'invoiceloans',label:'📄 Invoice'},{id:'orderloans',label:'📦 Order'},{id:'salaryloans',label:'👤 Salary'},{id:'reports',label:'📊 Reports'},{id:'activity',label:'Activity'},{id:'settings',label:'⚙️ Admin'}];
+  } else if(canDo('finance_manager')){
+    tabs=[{id:'dashboard',label:'Dashboard'},{id:'instantloans',label:'⚡ Instant'},{id:'longtermloans',label:'💼 Long Term'},{id:'invoiceloans',label:'📄 Invoice'},{id:'orderloans',label:'📦 Order'},{id:'salaryloans',label:'👤 Salary'},{id:'reports',label:'📊 Reports'},{id:'activity',label:'Activity'}];
+  } else {
+    tabs=[{id:'dashboard',label:'Dashboard'},{id:'instantloans',label:'⚡ Instant'},{id:'longtermloans',label:'💼 Long Term'},{id:'invoiceloans',label:'📄 Invoice'},{id:'orderloans',label:'📦 Order'},{id:'salaryloans',label:'👤 Salary'}];
+  }
+  var nav=document.getElementById('tbnav');nav.innerHTML='';
+  tabs.forEach(function(t){var b=document.createElement('button');b.className='tn';b.id='nt-'+t.id;b.textContent=t.label;b.onclick=function(){showTab(t.id);};nav.appendChild(b);});
+}
 function showHome(){showTab('dashboard');}
-function showTab(n){window._currentTab=n;document.querySelectorAll('.tn').forEach(function(b){b.classList.remove('ac');});var btn=document.getElementById('nt-'+n);if(btn)btn.classList.add('ac');var mc=document.getElementById('mainct');if(n==='dashboard')renderDashboard(mc);else if(n==='instantloans')renderInstantLoans(mc);else if(n==='longtermloans')renderLongTermLoans(mc);else if(n==='invoiceloans')renderInvoiceLoans(mc);else if(n==='orderloans')renderOrderLoans(mc);else if(n==='salaryloans')renderSalaryLoans(mc);else if(n==='reports')renderReports(mc);else if(n==='activity')renderActivity(mc);}
+function showTab(n){window._currentTab=n;document.querySelectorAll('.tn').forEach(function(b){b.classList.remove('ac');});var btn=document.getElementById('nt-'+n);if(btn)btn.classList.add('ac');var mc=document.getElementById('mainct');if(n==='dashboard')renderDashboard(mc);else if(n==='instantloans')renderInstantLoans(mc);else if(n==='longtermloans')renderLongTermLoans(mc);else if(n==='invoiceloans')renderInvoiceLoans(mc);else if(n==='orderloans')renderOrderLoans(mc);else if(n==='salaryloans')renderSalaryLoans(mc);else if(n==='reports')renderReports(mc);else if(n==='activity')renderActivity(mc);else if(n==='settings')renderSettings(mc);}
 // ===== DASHBOARD =====
 function renderDashboard(mc){
   var activeIL=instantLoans.filter(function(l){return ilStatus(l)==='active';}).length;
@@ -283,6 +294,7 @@ function renderInstantLoans(mc){
       h+='<td style="font-size:11px;color:'+(l.photos&&l.photos.length?'var(--ok2)':'var(--muted)')+';">'+(l.photos&&l.photos.length?'📷 '+l.photos.length:'—')+'</td>';
       h+='<td style="white-space:nowrap;"><button class="ab" onclick="ilView(\''+l.id+'\')">👁 View</button>';
       if(canManage()&&st!=='cleared'&&st!=='cancelled'){h+='<button class="ab" style="color:var(--ok2);border-color:var(--ok2);margin-top:2px;display:block;width:100%;" onclick="ilSettle(\''+l.id+'\')">✓ Settle</button><button class="ab" style="color:var(--blue2);border-color:var(--blue2);margin-top:2px;display:block;width:100%;" onclick="ilEarlySettle(\''+l.id+'\')">📅 Early</button>';if(st==='overdue_cancel')h+='<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;width:100%;" onclick="ilCancel(\''+l.id+'\')">✗ Cancel</button>';}
+      if(canDo('admin'))h+='<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;width:100%;" onclick="deleteIL(\''+l.id+'\')">🗑 Delete</button>';
       h+='</td></tr>';
     });
     h+='</tbody></table></div></div>';
@@ -404,7 +416,7 @@ function renderLongTermLoans(mc){
   var list=longTermLoans.filter(function(l){var s=ltStatus(l);return fs==='all'||s===fs;}).sort(function(a,b){return b.dateGiven>a.dateGiven?1:-1;});
   if(!list.length){h+='<div class="cd"><div class="es"><div class="ei">💼</div><div class="et">No long term loans</div></div></div>';}
   else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Client</th><th>Contact</th><th>Amount</th><th>Rate</th><th>Disbursed</th><th>Monthly</th><th>Paid</th><th>Balance</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';
-  list.forEach(function(l){var st=ltStatus(l),bal=ltBalance(l),paid=ltTotalPaid(l);var sc=st==='active'?'bgg':st==='overdue'?'bgr':st==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.clientName)+'</strong></td><td style="font-size:11px;color:var(--muted);">'+esc(l.contact||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'<div style="font-size:9px;color:var(--muted);">'+(l.interestRate?(l.interestRate*100)+'%/mo':'')+'</div></td><td>'+((l.interestRate||0)*100)+'%</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td style="font-family:monospace;">'+zmw(l.monthlyPayment)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(paid)+'</td><td style="font-family:monospace;font-weight:700;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue':st==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="ltView(\''+l.id+'\')">👁 View</button>'+(canManage()&&st!=='cleared'&&st!=='cancelled'?'<button class="ab" onclick="openLTModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+'</td></tr>';});
+  list.forEach(function(l){var st=ltStatus(l),bal=ltBalance(l),paid=ltTotalPaid(l);var sc=st==='active'?'bgg':st==='overdue'?'bgr':st==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.clientName)+'</strong></td><td style="font-size:11px;color:var(--muted);">'+esc(l.contact||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'<div style="font-size:9px;color:var(--muted);">'+(l.interestRate?(l.interestRate*100)+'%/mo':'')+'</div></td><td>'+((l.interestRate||0)*100)+'%</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td style="font-family:monospace;">'+zmw(l.monthlyPayment)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(paid)+'</td><td style="font-family:monospace;font-weight:700;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue':st==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="ltView(\''+l.id+'\')">👁 View</button>'+(canManage()&&st!=='cleared'&&st!=='cancelled'?'<button class="ab" onclick="openLTModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+(canDo('admin')?'<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;" onclick="deleteLT(\''+l.id+'\')">🗑</button>':'')+'</td></tr>';});
   h+='</tbody></table></div></div>';}
   mc.innerHTML=h;
 }
@@ -488,7 +500,7 @@ function renderInvoiceLoans(mc){
   var list=invoiceLoans.filter(function(l){var s=invStatus(l);return fs==='all'||s===fs;}).sort(function(a,b){return b.dateGiven>a.dateGiven?1:-1;});
   if(!list.length){h+='<div class="cd"><div class="es"><div class="ei">📄</div><div class="et">No invoice discounting loans</div></div></div>';}
   else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Company</th><th>Director</th><th>Invoice Amt</th><th>Disbursed (80%)</th><th>Term</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';
-  list.forEach(function(l){var s=invStatus(l),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.companyName)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(l.directorName||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td>'+l.termMonths+' mo</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="invView(\''+l.id+'\')">👁 View</button>'+(canManage()&&s!=='cleared'&&s!=='cancelled'?'<button class="ab" onclick="openInvModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+'</td></tr>';});
+  list.forEach(function(l){var s=invStatus(l),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.companyName)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(l.directorName||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td>'+l.termMonths+' mo</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="invView(\''+l.id+'\')">👁 View</button>'+(canManage()&&s!=='cleared'&&s!=='cancelled'?'<button class="ab" onclick="openInvModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+(canDo('admin')?'<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;" onclick="deleteInv(\''+l.id+'\')">🗑</button>':'')+'</td></tr>';});
   h+='</tbody></table></div></div>';}
   mc.innerHTML=h;
 }
@@ -537,7 +549,7 @@ function renderOrderLoans(mc){
   h+='</div>';
   var list=orderLoans.filter(function(l){var s=invStatus({status:l.status,months:l.months});return fs==='all'||s===fs;}).sort(function(a,b){return b.dateGiven>a.dateGiven?1:-1;});
   if(!list.length){h+='<div class="cd"><div class="es"><div class="ei">📦</div><div class="et">No order financing loans</div></div></div>';}
-  else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Company</th><th>Contact</th><th>Order Amount</th><th>Disbursed (70%)</th><th>Term</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';list.forEach(function(l){var s=invStatus({status:l.status,months:l.months}),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.companyName)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(l.contact||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td>'+l.termMonths+' mo</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="ordView(\''+l.id+'\')">👁 View</button>'+(canManage()&&s!=='cleared'&&s!=='cancelled'?'<button class="ab" onclick="openOrdModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+'</td></tr>';});h+='</tbody></table></div></div>';}
+  else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Company</th><th>Contact</th><th>Order Amount</th><th>Disbursed (70%)</th><th>Term</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';list.forEach(function(l){var s=invStatus({status:l.status,months:l.months}),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.companyName)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(l.contact||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td>'+l.termMonths+' mo</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="ordView(\''+l.id+'\')">👁 View</button>'+(canManage()&&s!=='cleared'&&s!=='cancelled'?'<button class="ab" onclick="openOrdModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+(canDo('admin')?'<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;" onclick="deleteOrd(\''+l.id+'\')">🗑</button>':'')+'</td></tr>';});h+='</tbody></table></div></div>';}
   mc.innerHTML=h;
 }
 function openOrdModal(editId){_ordEditId=editId||null;var l=editId?orderLoans.filter(function(x){return x.id===editId;})[0]:null;var e=document.getElementById('ordmod');if(e)e.remove();var h='<div class="mo op" id="ordmod"><div class="md mlg" style="margin-top:10px;"><div class="mtt">📦 '+(l?'Edit':'New')+' Order Financing</div><div class="fsec"><div class="fst">Company Information</div><div class="fr3"><div class="fg"><label class="fl">Company Name *</label><input class="fi" id="ord_co" value="'+esc(l?l.companyName:'')+'"></div><div class="fg"><label class="fl">Contact *</label><input class="fi" id="ord_contact" value="'+esc(l?l.contact:'')+'"></div><div class="fg"><label class="fl">Location *</label><input class="fi" id="ord_loc" value="'+esc(l?l.location:'')+'"></div></div></div><div class="fsec"><div class="fst">Loan Details</div><div class="fr3"><div class="fg"><label class="fl">Order Amount (ZMW) *</label><input class="fi" type="number" id="ord_amt" value="'+(l?l.amountGiven:'')+'" oninput="ordCalcModal()"></div><div class="fg"><label class="fl">Term (max 3 months) *</label><select class="fsel" id="ord_mo" onchange="ordCalcModal()">';for(var m=1;m<=3;m++)h+='<option value="'+m+'"'+(l&&l.termMonths===m?' selected':'')+'>'+m+' Month'+(m>1?'s':'')+'</option>';h+='</select></div><div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="ord_date" value="'+(l?l.dateGiven:td_())+'" onchange="ordCalcModal()"></div></div></div><div class="cb" id="ord_sum"><div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div></div><div class="fg"><label class="fl">Notes</label><input class="fi" id="ord_notes" value="'+esc(l?l.notes:'')+'"></div><div class="mft"><button class="btn bto" onclick="closeOrdModal()">Cancel</button><button class="btn btg" onclick="saveOrd()">📦 '+(l?'Update':'Issue')+'</button></div></div></div>';var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);ordCalcModal();}
@@ -634,7 +646,118 @@ function exportReport(){
   var csv=rows.map(function(r){return r.map(function(v){var s=String(v===null||v===undefined?'':v);if(s.indexOf(',')>=0||s.indexOf('"')>=0)s='"'+s.replace(/"/g,'""')+'"';return s;}).join(',');}).join('\r\n');
   var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='salty_corporate_'+today+'.csv';a.click();URL.revokeObjectURL(a.href);toast('Report exported!');
 }
-// ===== ACTIVITY =====
+// ===== DELETE FUNCTIONS =====
+function deleteIL(id){var l=instantLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('DELETE instant loan for '+l.clientName+'?\nThis cannot be undone.'))return;instantLoans=instantLoans.filter(function(x){return x.id!==id;});logAct('DELETED instant loan — '+l.clientName);save();toast('Deleted.');renderInstantLoans(document.getElementById('mainct'));}
+function deleteLT(id){var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('DELETE long term loan for '+l.clientName+'?\nThis cannot be undone.'))return;longTermLoans=longTermLoans.filter(function(x){return x.id!==id;});logAct('DELETED LT loan — '+l.clientName);save();toast('Deleted.');renderLongTermLoans(document.getElementById('mainct'));}
+function deleteInv(id){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('DELETE invoice loan for '+l.companyName+'?\nThis cannot be undone.'))return;invoiceLoans=invoiceLoans.filter(function(x){return x.id!==id;});logAct('DELETED invoice — '+l.companyName);save();toast('Deleted.');renderInvoiceLoans(document.getElementById('mainct'));}
+function deleteOrd(id){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('DELETE order loan for '+l.companyName+'?\nThis cannot be undone.'))return;orderLoans=orderLoans.filter(function(x){return x.id!==id;});logAct('DELETED order — '+l.companyName);save();toast('Deleted.');renderOrderLoans(document.getElementById('mainct'));}
+
+// ===== ADMIN SETTINGS =====
+function renderSettings(mc){
+  if(!canDo('admin')){mc.innerHTML='<div class="cd"><div class="es"><div class="ei">🔒</div><div class="et">Admin only</div></div></div>';return;}
+  var h='<div class="pgh" style="background:linear-gradient(135deg,#0d0d0d,#1a1208);border:1px solid rgba(201,168,76,.2);">';
+  h+='<div><div class="pgt">⚙️ Admin Settings</div><div class="pgs">Manage users, branches, and system settings</div></div></div>';
+
+  // User management
+  h+='<div class="cd" style="margin-bottom:16px;"><div class="cdh"><span class="cdt">👥 User Accounts</span><button class="btn btg" style="padding:6px 14px;font-size:12px;" onclick="openAddUserModal()">+ Add User</button></div><div class="cdb">';
+  var ukeys=Object.keys(USERS);
+  ukeys.forEach(function(uname){
+    var u=USERS[uname];
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05);">';
+    h+='<div><div style="font-size:14px;font-weight:600;">'+esc(u.display)+'</div>';
+    h+='<div style="font-size:11px;color:var(--muted);">@'+esc(uname)+' · '+esc(u.role)+'</div></div>';
+    h+='<div style="display:flex;gap:8px;">';
+    h+='<button class="ab" onclick="openEditUserModal(\''+uname+'\')">✏️ Edit</button>';
+    if(uname!=='admin')h+='<button class="ab" style="color:var(--red2);border-color:var(--red2);" onclick="deleteUser(\''+uname+'\')">🗑 Delete</button>';
+    h+='</div></div>';
+  });
+  h+='</div></div>';
+
+  // Branch management for instant loans
+  h+='<div class="cd" style="margin-bottom:16px;"><div class="cdh"><span class="cdt">🏢 Instant Loan Branches</span><button class="btn btg" style="padding:6px 14px;font-size:12px;" onclick="openAddBranchModal()">+ Add Branch</button></div><div class="cdb">';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">';
+  BRANCHES.forEach(function(b){
+    h+='<div style="display:flex;align-items:center;gap:6px;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);border-radius:8px;padding:6px 12px;">';
+    h+='<span style="font-size:13px;font-weight:600;">'+esc(b)+'</span>';
+    if(b!=='Kitwe')h+='<button onclick="removeBranch(\''+b+'\')" style="background:none;border:none;color:var(--red2);cursor:pointer;font-size:14px;padding:0 0 0 4px;">×</button>';
+    h+='</div>';
+  });
+  h+='</div><div style="font-size:11px;color:var(--muted);">Kitwe is the head office and cannot be removed.</div>';
+  h+='</div></div>';
+
+  mc.innerHTML=h;
+}
+
+function openAddUserModal(editUsername){
+  var u=editUsername?USERS[editUsername]:null;
+  var e=document.getElementById('usemod');if(e)e.remove();
+  var roles=['admin','finance_manager','kitwe_assist'];
+  var h='<div class="mo op" id="usemod"><div class="md" style="margin-top:10px;"><div class="mtt">'+(u?'Edit':'Add')+' User Account</div>';
+  h+='<div class="fg"><label class="fl">Display Name *</label><input class="fi" id="use_display" placeholder="e.g. Adriana Banda" value="'+esc(u?u.display:'')+'"></div>';
+  if(!editUsername)h+='<div class="fg"><label class="fl">Username *</label><input class="fi" id="use_uname" placeholder="e.g. adriana (no spaces, lowercase)"></div>';
+  else h+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Username: <strong>'+esc(editUsername)+'</strong> (cannot be changed)</div>';
+  h+='<div class="fg"><label class="fl">Password *</label><input class="fi" id="use_pass" value="'+esc(u?u.pass:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Role *</label><select class="fsel" id="use_role">';
+  roles.forEach(function(r){h+='<option value="'+r+'"'+(u&&u.role===r?' selected':'')+'>'+r+'</option>';});
+  h+='</select></div>';
+  h+='<div class="mft"><button class="btn bto" onclick="closeUserModal()">Cancel</button><button class="btn btg" onclick="saveUser('+(editUsername?'\''+editUsername+'\'':'null')+')">Save Account</button></div>';
+  h+='</div></div>';
+  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);
+}
+function openEditUserModal(uname){openAddUserModal(uname);}
+function closeUserModal(){var m=document.getElementById('usemod');if(m)m.remove();}
+function saveUser(editUsername){
+  var display=(document.getElementById('use_display').value||'').trim();
+  var pass=(document.getElementById('use_pass').value||'').trim();
+  var role=document.getElementById('use_role').value;
+  if(!display||!pass){toast('Please fill all fields.');return;}
+  if(editUsername){
+    USERS[editUsername].display=display;
+    USERS[editUsername].pass=pass;
+    USERS[editUsername].role=role;
+    if(cu.username===editUsername){cu.display=display;cu.role=role;document.getElementById('tbuser').textContent=display;document.getElementById('tbrole').textContent=RLABELS[role]||role;}
+    logAct('Updated user account: '+editUsername);
+    toast('Account updated!');
+  } else {
+    var uname=(document.getElementById('use_uname').value||'').trim().toLowerCase().replace(/\s+/g,'_');
+    if(!uname){toast('Please enter a username.');return;}
+    if(USERS[uname]){toast('Username already exists.');return;}
+    USERS[uname]={pass:pass,display:display,role:role};
+    logAct('Added user account: '+uname);
+    toast('Account created! Username: '+uname);
+  }
+  save();closeUserModal();renderSettings(document.getElementById('mainct'));
+}
+function deleteUser(uname){
+  if(!confirm('Delete account for '+uname+'?\nThis cannot be undone.'))return;
+  delete USERS[uname];
+  logAct('DELETED user account: '+uname);
+  save();toast('Account deleted.');renderSettings(document.getElementById('mainct'));
+}
+function openAddBranchModal(){
+  var e=document.getElementById('brmod');if(e)e.remove();
+  var h='<div class="mo op" id="brmod"><div class="md" style="margin-top:10px;margin-max-width:400px;"><div class="mtt">Add Branch</div>';
+  h+='<div class="fg"><label class="fl">Branch Name *</label><input class="fi" id="br_name" placeholder="e.g. Solwezi"></div>';
+  h+='<div class="mft"><button class="btn bto" onclick="closeBrModal()">Cancel</button><button class="btn btg" onclick="saveBranch()">Add Branch</button></div>';
+  h+='</div></div>';
+  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);
+}
+function closeBrModal(){var m=document.getElementById('brmod');if(m)m.remove();}
+function saveBranch(){
+  var name=(document.getElementById('br_name').value||'').trim();
+  if(!name){toast('Enter branch name.');return;}
+  if(BRANCHES.indexOf(name)>=0){toast('Branch already exists.');return;}
+  BRANCHES.push(name);
+  logAct('Added branch: '+name);
+  save();closeBrModal();toast('Branch added!');renderSettings(document.getElementById('mainct'));
+}
+function removeBranch(name){
+  if(!confirm('Remove branch "'+name+'"?\nThis will not affect existing loans.'))return;
+  BRANCHES=BRANCHES.filter(function(b){return b!==name;});
+  logAct('Removed branch: '+name);
+  save();toast('Branch removed.');renderSettings(document.getElementById('mainct'));
+}
+
 function renderActivity(mc){
   var h='<div class="pgh" style="background:linear-gradient(135deg,#0d0d0d,#1a1a1a);border:1px solid var(--border);"><div><div class="pgt">Activity Log</div><div class="pgs">Recent actions</div></div></div>';
   h+='<div class="cd"><div class="cdb">';
