@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Salty Enterprises — Corporate Finance</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+:root{
+  --gold:#c9a84c;--gold2:#e8c96a;--dark:#0d0d0d;--dark2:#1a1a1a;--dark3:#242424;
+  --card:#1e1e1e;--border:#2e2e2e;--text:#f0f0f0;--muted:#888;--muted2:#555;
+  --red:#c0392b;--red2:#e74c3c;--ok:#1e8449;--ok2:#27ae60;
+  --blue:#1a5276;--blue2:#2980b9;--warn:#d4820a;--warn2:#f39c12;
+  --purple:#6c3483;--purple2:#9b59b6;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--dark);color:var(--text);min-height:100vh;}
+#ls{display:flex;min-height:100vh;}
+.ls-left{flex:1;background:linear-gradient(135deg,#0d0d0d,#1a1208);display:flex;flex-direction:column;justify-content:center;padding:60px;position:relative;overflow:hidden;}
+.ls-left::before{content:'';position:absolute;top:-100px;left:-100px;width:400px;height:400px;background:radial-gradient(circle,rgba(201,168,76,.12) 0%,transparent 70%);}
+.ls-logo{display:flex;align-items:center;gap:14px;margin-bottom:60px;}
+.ls-logo-icon{width:52px;height:52px;background:linear-gradient(135deg,var(--gold),var(--gold2));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;}
+.ls-logo-name{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;}
+.ls-logo-sub{font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:2px;margin-top:2px;}
+.ls-headline{font-family:'Playfair Display',serif;font-size:52px;font-weight:800;line-height:1.1;margin-bottom:20px;}
+.ls-headline span{color:var(--gold);}
+.ls-desc{font-size:15px;color:var(--muted);line-height:1.7;max-width:420px;margin-bottom:40px;}
+.ls-tags{display:flex;flex-wrap:wrap;gap:8px;}
+.ls-tag{background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.2);color:var(--gold);font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;}
+.ls-right{width:460px;background:var(--dark2);display:flex;flex-direction:column;justify-content:center;padding:60px 50px;border-left:1px solid var(--border);}
+.ls-title{font-family:'Playfair Display',serif;font-size:32px;font-weight:700;margin-bottom:8px;}
+.ls-sub{font-size:13px;color:var(--muted);margin-bottom:36px;}
+.ls-field{margin-bottom:18px;}
+.ls-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:8px;}
+.ls-input{width:100%;background:var(--dark3);border:1.5px solid var(--border);color:var(--text);padding:13px 16px;border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;}
+.ls-input:focus{border-color:var(--gold);}
+.ls-btn{width:100%;background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000;font-weight:700;font-size:15px;padding:14px;border:none;border-radius:10px;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:8px;}
+.ls-err{background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.3);color:var(--red2);font-size:12px;padding:10px 14px;border-radius:8px;margin-top:12px;display:none;}
+.ls-creds{margin-top:28px;border-top:1px solid var(--border);padding-top:20px;}
+.ls-ctitle{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;}
+.ls-cred{background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+.ls-cred-info{font-size:12px;color:var(--muted);}
+.ls-cred-info strong{color:var(--text);display:block;font-size:13px;}
+.ls-cred-btn{background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);color:var(--gold);font-size:11px;font-weight:600;padding:4px 12px;border-radius:6px;cursor:pointer;}
+#app{display:none;flex-direction:column;min-height:100vh;}
+.topbar{background:var(--dark2);border-bottom:1px solid var(--border);padding:0 20px;height:58px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;}
+.tb-brand{font-family:'Playfair Display',serif;font-size:16px;font-weight:700;white-space:nowrap;}
+.tb-brand span{color:var(--gold);}
+.tb-role{font-size:10px;font-weight:600;color:var(--gold);background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.2);padding:3px 10px;border-radius:20px;white-space:nowrap;}
+.tb-nav{display:flex;gap:2px;flex:1;overflow-x:auto;}
+.tb-nav::-webkit-scrollbar{display:none;}
+.tn{background:none;border:none;color:var(--muted);font-size:12px;font-weight:600;padding:8px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif;transition:all .2s;}
+.tn:hover{color:var(--text);background:rgba(255,255,255,.05);}
+.tn.ac{color:var(--gold);background:rgba(201,168,76,.1);}
+.tb-user{font-size:12px;color:var(--muted);margin-left:auto;}
+.tb-out{background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.3);color:var(--red2);font-size:11px;font-weight:600;padding:5px 12px;border-radius:8px;cursor:pointer;}
+.ct{flex:1;padding:20px;max-width:1400px;width:100%;margin:0 auto;}
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:16px;}
+.sc{background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:12px;padding:16px;}
+.si{font-size:24px;margin-bottom:6px;}
+.sl{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+.sv{font-size:22px;font-weight:700;}
+.ss{font-size:10px;color:var(--muted);margin-top:2px;}
+.cd{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden;}
+.cdh{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.cdt{font-size:13px;font-weight:700;}
+.cdb{padding:16px;}
+.pgh{border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+.pgt{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;}
+.pgs{font-size:11px;opacity:.75;margin-top:3px;}
+.tw{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead tr{border-bottom:1px solid var(--border);}
+th{padding:10px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,.02);}
+.bg{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;}
+.bgg{background:rgba(30,132,73,.2);color:#2ecc71;}
+.bgr{background:rgba(192,57,43,.2);color:var(--red2);}
+.bgo{background:rgba(212,130,10,.2);color:var(--warn2);}
+.bgb{background:rgba(41,128,185,.2);color:#3498db;}
+.bgx{background:rgba(100,100,100,.2);color:#888;}
+.fi{width:100%;background:var(--dark3);border:1.5px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;}
+.fi:focus{border-color:var(--gold);}
+textarea.fi{resize:vertical;}
+.fsel{width:100%;background:var(--dark3);border:1.5px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
+.fg{margin-bottom:12px;}
+.fl{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;}
+.fr{display:flex;gap:12px;flex-wrap:wrap;}
+.fr>*{flex:1;min-width:180px;}
+.fr3{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
+.fsec{background:var(--dark3);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;}
+.fst{font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.btn{padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:opacity .2s;}
+.btg{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000;}
+.bto{background:transparent;border:1.5px solid var(--border);color:var(--text);}
+.btd{background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.3);color:var(--red2);}
+.btok{background:rgba(30,132,73,.15);border:1px solid rgba(30,132,73,.3);color:var(--ok2);}
+.ab{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.ab:hover{color:var(--text);border-color:var(--gold);}
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;overflow-y:auto;padding:20px;}
+.mo.op{display:flex;align-items:flex-start;justify-content:center;}
+.md{background:var(--dark2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:700px;padding:24px;}
+.mlg{max-width:900px;}
+.mtt{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+.mft{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);}
+.cb{background:rgba(201,168,76,.05);border:1.5px solid rgba(201,168,76,.2);border-radius:10px;padding:16px;margin-bottom:14px;}
+.rm{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);}
+.rml{font-size:12px;color:var(--muted);}
+.rmv{font-size:13px;font-weight:500;text-align:right;}
+.bk{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px 0;margin-bottom:16px;display:flex;align-items:center;gap:6px;font-family:'DM Sans',sans-serif;}
+.bk:hover{color:var(--gold);}
+.es{text-align:center;padding:40px;}
+.ei{font-size:40px;margin-bottom:10px;}
+.et{font-weight:600;color:var(--muted);}
+.uz{border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:border-color .2s;position:relative;}
+.uz:hover{border-color:var(--gold);}
+.uz input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+.fitm{display:flex;justify-content:space-between;padding:5px 8px;background:rgba(201,168,76,.05);border:1px solid rgba(201,168,76,.1);border-radius:6px;margin-top:4px;font-size:11px;}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--dark2);border:1px solid var(--gold);color:var(--text);padding:12px 24px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;transition:transform .3s;white-space:nowrap;}
+#toast.show{transform:translateX(-50%) translateY(0);}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--dark);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+@media(max-width:768px){.ls-left{display:none;}.ls-right{width:100%;padding:40px 24px;}.ct{padding:12px;}.sg{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<div id="ls">
+  <div class="ls-left">
+    <div class="ls-logo">
+      <div class="ls-logo-icon">💼</div>
+      <div><div class="ls-logo-name">Salty Enterprises</div><div class="ls-logo-sub">Corporate Finance Division</div></div>
+    </div>
+    <div class="ls-headline">Corporate<br><span>Lending Portal</span></div>
+    <div class="ls-desc">Comprehensive corporate finance management. All products. All clients. One platform.</div>
+    <div class="ls-tags">
+      <span class="ls-tag">⚡ Instant Loans</span>
+      <span class="ls-tag">💼 Long Term</span>
+      <span class="ls-tag">📄 Invoice Discounting</span>
+      <span class="ls-tag">📦 Order Financing</span>
+      <span class="ls-tag">👤 Salary Advance</span>
+    </div>
+    <div style="margin-top:40px;font-size:11px;color:var(--muted2);">Kitwe Head Office · Salty Enterprises Ltd © 2026</div>
+  </div>
+  <div class="ls-right">
+    <div class="ls-title">Sign In</div>
+    <div class="ls-sub">Access the Corporate Finance Portal</div>
+    <div class="ls-field"><label class="ls-label">Username</label><input class="ls-input" id="lu" placeholder="Enter username" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="ls-field"><label class="ls-label">Password</label><input class="ls-input" type="password" id="lp" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="ls-btn" onclick="doLogin()">Sign in →</button>
+    <div class="ls-err" id="lerr">Invalid username or password.</div>
+    <div class="ls-creds">
+      <div class="ls-ctitle">🔑 Default Credentials</div>
+      <div class="ls-cred"><div class="ls-cred-info"><strong>admin</strong>admin / admin123</div><button class="ls-cred-btn" onclick="quickLogin('admin','admin123')">Use</button></div>
+      <div class="ls-cred"><div class="ls-cred-info"><strong>kitwe_finance</strong>kitwe_finance / finance123</div><button class="ls-cred-btn" onclick="quickLogin('kitwe_finance','finance123')">Use</button></div>
+      <div class="ls-cred"><div class="ls-cred-info"><strong>kitwe_assist</strong>kitwe_assist / assist123</div><button class="ls-cred-btn" onclick="quickLogin('kitwe_assist','assist123')">Use</button></div>
+    </div>
+  </div>
+</div>
+<div id="app">
+  <div class="topbar">
+    <div class="ls-logo-icon" style="width:32px;height:32px;font-size:16px;border-radius:8px;flex-shrink:0;">💼</div>
+    <div class="tb-brand">Salty <span>Corporate</span></div>
+    <div class="tb-role" id="tbrole"></div>
+    <div class="tb-nav" id="tbnav"></div>
+    <span class="tb-user" id="tbuser"></span>
+    <button class="tb-out" onclick="doLogout()">Sign Out</button>
+  </div>
+  <div class="ct" id="mainct"></div>
+</div>
+<div id="toast"></div>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script>
+var firebaseConfig={apiKey:"AIzaSyCwQ7rK50dW0jxPeksS_bYTtDawAH4zIus",authDomain:"salty-enterprises.firebaseapp.com",projectId:"salty-enterprises",storageBucket:"salty-enterprises.firebasestorage.app",messagingSenderId:"40904661629",appId:"1:40904661629:web:5a1302f3f2b20d3e402f14"};
+var _db=null,_fbReady=false,_saveTimer=null,_isSaving=false,_pendingSave=false;
+function initFirebase(){try{if(typeof firebase==='undefined')return;if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);_db=firebase.firestore();_fbReady=true;console.log('Firebase ready');}catch(e){_fbReady=false;}}
+var USERS={admin:{pass:'admin123',display:'Admin',role:'admin'},kitwe_finance:{pass:'finance123',display:'Finance Manager',role:'finance_manager'},kitwe_assist:{pass:'assist123',display:'Kitwe Assistant',role:'kitwe_assist'}};
+var RLABELS={admin:'Head Office Admin',finance_manager:'Finance Manager',kitwe_assist:'Kitwe Assistant'};
+var BRANCHES=['Kitwe','Nakadoli','Mufulira','Chingola','Chililabombwe','Luanshya','Ndola','Kalulushi','Lusaka'];
+var instantLoans=[],longTermLoans=[],invoiceLoans=[],orderLoans=[],salaryLoans=[],actLog=[];
+var cu=null;
+var CLOUDINARY_CLOUD='dsva9c8h0',CLOUDINARY_PRESET='Salty_Photos';
+function pad(n){return n<10?'0'+n:String(n);}
+function td_(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function now_(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());}
+function fmtD(s){if(!s)return '—';var p=s.substring(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s;}
+function fmtDT(s){if(!s)return '—';return fmtD(s)+(s.length>10?' '+s.substring(11,16):'');}
+function zmw(n){if(n===null||n===undefined)return '—';return 'ZMW '+Number(n).toLocaleString('en-ZM',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function esc(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function canDo(){if(!cu)return false;for(var i=0;i<arguments.length;i++)if(cu.role===arguments[i])return true;return false;}
+function canManage(){return canDo('admin','finance_manager');}
+function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
+function logAct(msg){actLog.unshift({msg:msg,user:cu?cu.display:'?',time:now_()});if(actLog.length>200)actLog.pop();}
+function _saveLS(){try{localStorage.setItem('salty_corp',JSON.stringify({instantLoans:instantLoans,longTermLoans:longTermLoans,invoiceLoans:invoiceLoans,orderLoans:orderLoans,salaryLoans:salaryLoans,actLog:actLog}));}catch(e){}}
+function saveData(){_saveLS();if(!_fbReady||!_db)return;if(_saveTimer)clearTimeout(_saveTimer);_saveTimer=setTimeout(_pushToFirebase,1500);}
+function save(){saveData();}
+function _pushToFirebase(){if(!_fbReady||!_db)return;if(_isSaving){_pendingSave=true;return;}_isSaving=true;_db.collection('salty-corporate').doc('data').set({instantLoans:instantLoans,longTermLoans:longTermLoans,invoiceLoans:invoiceLoans,orderLoans:orderLoans,salaryLoans:salaryLoans,actLog:actLog.slice(0,100),ts:Date.now()}).then(function(){_isSaving=false;if(_pendingSave){_pendingSave=false;_pushToFirebase();}}).catch(function(e){_isSaving=false;toast('⚠️ Sync failed');});}
+function _loadFromFirebase(){if(!_fbReady||!_db)return;_db.collection('salty-corporate').doc('data').get().then(function(doc){if(doc.exists){var d=doc.data();if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;}_saveLS();if(cu&&window._currentTab)showTab(window._currentTab);_startListener();}).catch(function(){_startListener();});}
+function _startListener(){if(!_fbReady||!_db)return;_db.collection('salty-corporate').doc('data').onSnapshot(function(doc){if(!doc.exists)return;var d=doc.data();if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;_saveLS();if(cu&&!document.querySelector('.mo.op')&&window._currentTab)showTab(window._currentTab);},function(e){console.warn('Listener:',e);});}
+function _uploadOnePhoto(dataUrl,filename){return new Promise(function(resolve){try{var fd=new FormData();fd.append('file',dataUrl);fd.append('upload_preset',CLOUDINARY_PRESET);fd.append('public_id',filename);fetch('https://api.cloudinary.com/v1_1/'+CLOUDINARY_CLOUD+'/image/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){d.secure_url?resolve(d.secure_url):resolve(null);}).catch(function(){resolve(null);});}catch(e){resolve(null);}});}
+function doLogin(){var u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;var user=USERS[u];if(!user||user.pass!==p){document.getElementById('lerr').style.display='block';return;}cu={username:u,display:user.display,role:user.role};document.getElementById('lerr').style.display='none';document.getElementById('ls').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('app').style.flexDirection='column';document.getElementById('tbrole').textContent=RLABELS[cu.role]||cu.role;document.getElementById('tbuser').textContent=cu.display;buildNav();try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;}}catch(e){}initFirebase();if(_fbReady)_loadFromFirebase();else setTimeout(function(){initFirebase();if(_fbReady)_loadFromFirebase();},2000);showHome();}
+function quickLogin(u,p){document.getElementById('lu').value=u;document.getElementById('lp').value=p;doLogin();}
+function doLogout(){cu=null;window._currentTab=null;document.getElementById('app').style.display='none';document.getElementById('ls').style.display='flex';document.getElementById('lu').value='';document.getElementById('lp').value='';}
+function buildNav(){var tabs=canDo('admin','finance_manager')?[{id:'dashboard',label:'Dashboard'},{id:'instantloans',label:'⚡ Instant'},{id:'longtermloans',label:'💼 Long Term'},{id:'invoiceloans',label:'📄 Invoice'},{id:'orderloans',label:'📦 Order'},{id:'salaryloans',label:'👤 Salary'},{id:'reports',label:'📊 Reports'},{id:'activity',label:'Activity'}]:[{id:'dashboard',label:'Dashboard'},{id:'instantloans',label:'⚡ Instant'},{id:'longtermloans',label:'💼 Long Term'},{id:'invoiceloans',label:'📄 Invoice'},{id:'orderloans',label:'📦 Order'},{id:'salaryloans',label:'👤 Salary'}];var nav=document.getElementById('tbnav');nav.innerHTML='';tabs.forEach(function(t){var b=document.createElement('button');b.className='tn';b.id='nt-'+t.id;b.textContent=t.label;b.onclick=function(){showTab(t.id);};nav.appendChild(b);});}
+function showHome(){showTab('dashboard');}
+function showTab(n){window._currentTab=n;document.querySelectorAll('.tn').forEach(function(b){b.classList.remove('ac');});var btn=document.getElementById('nt-'+n);if(btn)btn.classList.add('ac');var mc=document.getElementById('mainct');if(n==='dashboard')renderDashboard(mc);else if(n==='instantloans')renderInstantLoans(mc);else if(n==='longtermloans')renderLongTermLoans(mc);else if(n==='invoiceloans')renderInvoiceLoans(mc);else if(n==='orderloans')renderOrderLoans(mc);else if(n==='salaryloans')renderSalaryLoans(mc);else if(n==='reports')renderReports(mc);else if(n==='activity')renderActivity(mc);}
+// ===== DASHBOARD =====
+function renderDashboard(mc){
+  var activeIL=instantLoans.filter(function(l){return ilStatus(l)==='active';}).length;
+  var overdueAll=0;
+  instantLoans.forEach(function(l){var s=ilStatus(l);if(s.indexOf('overdue')>=0)overdueAll++;});
+  longTermLoans.forEach(function(l){if(ltStatus(l)==='overdue')overdueAll++;});
+  invoiceLoans.forEach(function(l){if(invStatus(l)==='overdue')overdueAll++;});
+  orderLoans.forEach(function(l){if(invStatus({status:l.status,months:l.months})==='overdue')overdueAll++;});
+  salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){if(empStatus(e)==='overdue')overdueAll++;});});
+  var totalLoans=instantLoans.length+longTermLoans.length+invoiceLoans.length+orderLoans.length;
+  var totalEmps=0;salaryLoans.forEach(function(co){totalEmps+=(co.employees||[]).length;});
+  var totalOut=0;
+  instantLoans.forEach(function(l){var s=ilStatus(l);if(s!=='cleared'&&s!=='cancelled')totalOut+=(l.amountGiven||0);});
+  longTermLoans.forEach(function(l){if(ltStatus(l)!=='cleared'&&ltStatus(l)!=='cancelled')totalOut+=(l.disbursedAmount||0);});
+  invoiceLoans.forEach(function(l){if(invStatus(l)!=='cleared'&&invStatus(l)!=='cancelled')totalOut+=(l.disbursedAmount||0);});
+  orderLoans.forEach(function(l){if(invStatus({status:l.status,months:l.months})!=='cleared')totalOut+=(l.disbursedAmount||0);});
+  salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){if(empStatus(e)!=='cleared'&&empStatus(e)!=='cancelled')totalOut+=(e.disbursedAmount||0);});});
+  var h='<div style="background:linear-gradient(135deg,#0d0d0d,#1a1208);border:1px solid rgba(201,168,76,.2);border-radius:14px;padding:20px 24px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">';
+  h+='<div><div style="font-family:\'Playfair Display\',serif;font-size:24px;font-weight:800;">Good '+(new Date().getHours()<12?'morning':'afternoon')+', '+esc(cu.display)+'</div><div style="font-size:13px;color:var(--muted);margin-top:4px;">Corporate Finance Portfolio — '+fmtD(td_())+'</div></div><div style="font-size:32px;">💼</div></div>';
+  h+='<div class="sg">';
+  h+='<div class="sc"><div class="si">💼</div><div class="sl">Total Loans</div><div class="sv">'+totalLoans+'</div></div>';
+  h+='<div class="sc"><div class="si">👤</div><div class="sl">Salary Employees</div><div class="sv">'+totalEmps+'</div></div>';
+  h+='<div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+overdueAll+'</div></div>';
+  h+='<div class="sc" style="border-top-color:var(--gold)"><div class="si">💰</div><div class="sl">Outstanding</div><div class="sv" style="font-size:14px;">'+zmw(totalOut)+'</div></div>';
+  h+='</div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px;">';
+  var prods=[{tab:'instantloans',icon:'⚡',label:'Instant Loans',count:instantLoans.length,c:'#2980b9'},{tab:'longtermloans',icon:'💼',label:'Long Term',count:longTermLoans.length,c:'#1e8449'},{tab:'invoiceloans',icon:'📄',label:'Invoice Disc.',count:invoiceLoans.length,c:'#6c3483'},{tab:'orderloans',icon:'📦',label:'Order Finance',count:orderLoans.length,c:'#8e44ad'},{tab:'salaryloans',icon:'👤',label:'Salary Advance',count:salaryLoans.length+' co · '+totalEmps+' emp',c:'#d4820a'}];
+  prods.forEach(function(p){h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;" onclick="showTab(\''+p.tab+'\')" onmouseover="this.style.borderColor=\''+p.c+'\'" onmouseout="this.style.borderColor=\'var(--border)\'"><div style="font-size:26px;margin-bottom:8px;">'+p.icon+'</div><div style="font-size:13px;font-weight:700;margin-bottom:4px;">'+p.label+'</div><div style="font-size:20px;font-weight:700;color:'+p.c+';">'+p.count+'</div></div>';});
+  h+='</div>';
+  mc.innerHTML=h;
+}
+// ===== INSTANT LOANS =====
+var IL_RATES={1:0.15,2:0.25,3:0.30,4:0.40};
+var _ilEditId=null,_ilPhotos=[];
+function ilDueDate(dg,w){var d=new Date(dg+'T00:00:00');d.setDate(d.getDate()+w*7);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function ilStatus(l){if(l.status==='cleared')return 'cleared';if(l.status==='cancelled')return 'cancelled';var today=td_(),due=l.dueDate;if(today<=due)return 'active';var days=Math.floor((new Date(today+'T00:00:00')-new Date(due+'T00:00:00'))/(864e5));if(days>=2&&days<9)return 'overdue_penalty';if(days>=9)return 'overdue_cancel';return 'overdue';}
+function ilTotalDue(l){var w=l.weeksUsed||l.termWeeks,rate=IL_RATES[w]||IL_RATES[l.termWeeks],base=(l.amountGiven||0)*(1+rate),st=ilStatus(l);if(st==='overdue_penalty'||st==='overdue_cancel')base*=1.10;return Math.round(base*100)/100;}
+function renderInstantLoans(mc){
+  var fs=window._ilFilter||'all',fb=window._ilBranch||'ALL';
+  var stats={active:0,overdue:0,cleared:0,cancelled:0,out:0};
+  instantLoans.forEach(function(l){var s=ilStatus(l);if(s==='active')stats.active++;else if(s.indexOf('overdue')>=0)stats.overdue++;else if(s==='cleared')stats.cleared++;else stats.cancelled++;if(s!=='cleared'&&s!=='cancelled')stats.out+=(l.amountGiven||0);});
+  var h='<div class="pgh" style="background:linear-gradient(135deg,#0d1a2e,#1a3a5c);">';
+  h+='<div><div class="pgt">⚡ Instant Loans</div><div class="pgs">1–4 weeks · All 9 branches · Kitwe managed</div></div>';
+  if(canManage())h+='<button class="btn btg" onclick="openILModal()">+ New Instant Loan</button>';
+  h+='</div>';
+  h+='<div class="sg">';
+  h+='<div class="sc"><div class="si">⚡</div><div class="sl">Active</div><div class="sv">'+stats.active+'</div></div>';
+  h+='<div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+stats.overdue+'</div></div>';
+  h+='<div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Cleared</div><div class="sv" style="color:var(--ok2)">'+stats.cleared+'</div></div>';
+  h+='<div class="sc"><div class="si">💰</div><div class="sl">Outstanding</div><div class="sv" style="font-size:14px;">'+zmw(stats.out)+'</div></div>';
+  h+='</div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
+  [['all','All'],['active','Active'],['overdue','Overdue'],['cleared','Cleared'],['cancelled','Cancelled']].forEach(function(f){var a=fs===f[0];h+='<button onclick="window._ilFilter=\''+f[0]+'\';renderInstantLoans(document.getElementById(\'mainct\'))" style="padding:6px 14px;border-radius:20px;border:1.5px solid '+(a?'var(--gold)':'var(--border)')+';background:'+(a?'rgba(201,168,76,.15)':'transparent')+';color:'+(a?'var(--gold)':'var(--muted)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:\'DM Sans\',sans-serif;">'+f[1]+'</button>';});
+  h+='<select onchange="window._ilBranch=this.value;renderInstantLoans(document.getElementById(\'mainct\'))" style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;background:var(--dark3);color:var(--text);font-family:\'DM Sans\',sans-serif;"><option value="ALL">All Branches</option>';
+  BRANCHES.forEach(function(b){h+='<option value="'+b+'"'+(fb===b?' selected':'')+'>'+b+'</option>';});
+  h+='</select></div>';
+  var list=instantLoans.filter(function(l){var s=ilStatus(l);var sok=fs==='all'||(fs==='overdue'?(s.indexOf('overdue')>=0):s===fs);return sok&&(fb==='ALL'||l.branch===fb);}).sort(function(a,b){return b.dateGiven>a.dateGiven?1:-1;});
+  if(!list.length){h+='<div class="cd"><div class="es"><div class="ei">⚡</div><div class="et">No instant loans found</div></div></div>';}
+  else{
+    h+='<div class="cd"><div class="tw"><table><thead><tr><th>Client</th><th>Branch</th><th>Amount</th><th>Term</th><th>Total Due</th><th>Date Given</th><th>Due Date</th><th>Collateral</th><th>Status</th><th>Photos</th><th>Actions</th></tr></thead><tbody>';
+    list.forEach(function(l){
+      var st=ilStatus(l),td=ilTotalDue(l);
+      var slbl=st==='active'?'Active':st==='overdue'?'Overdue':st==='overdue_penalty'?'Overdue+Penalty':st==='overdue_cancel'?'Cancel Risk':st==='cleared'?'Cleared':'Cancelled';
+      var scls=st==='active'?'bgg':st.indexOf('overdue')>=0?'bgr':st==='cleared'?'bgb':'bgx';
+      h+='<tr><td><strong>'+esc(l.clientName)+'</strong><div style="font-size:10px;color:var(--muted);">'+esc(l.clientPhone||'')+'</div></td>';
+      h+='<td style="font-size:12px;">'+esc(l.branch)+'</td>';
+      h+='<td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td>';
+      h+='<td>'+l.termWeeks+' wk · '+(IL_RATES[l.termWeeks]*100)+'%</td>';
+      h+='<td style="font-family:monospace;font-weight:700;color:'+(st.indexOf('overdue')>=0?'var(--red2)':st==='cleared'?'var(--ok2)':'var(--text)')+';">'+zmw(td)+'</td>';
+      h+='<td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td>';
+      h+='<td style="font-size:12px;color:'+(st.indexOf('overdue')>=0?'var(--red2)':'var(--text)')+';">'+fmtD(l.dueDate)+'</td>';
+      h+='<td style="font-size:11px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(l.collateral||'')+'">'+esc(l.collateral||'—')+'</td>';
+      h+='<td><span class="bg '+scls+'">'+slbl+'</span></td>';
+      h+='<td style="font-size:11px;color:'+(l.photos&&l.photos.length?'var(--ok2)':'var(--muted)')+';">'+(l.photos&&l.photos.length?'📷 '+l.photos.length:'—')+'</td>';
+      h+='<td style="white-space:nowrap;"><button class="ab" onclick="ilView(\''+l.id+'\')">👁 View</button>';
+      if(canManage()&&st!=='cleared'&&st!=='cancelled'){h+='<button class="ab" style="color:var(--ok2);border-color:var(--ok2);margin-top:2px;display:block;width:100%;" onclick="ilSettle(\''+l.id+'\')">✓ Settle</button><button class="ab" style="color:var(--blue2);border-color:var(--blue2);margin-top:2px;display:block;width:100%;" onclick="ilEarlySettle(\''+l.id+'\')">📅 Early</button>';if(st==='overdue_cancel')h+='<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;width:100%;" onclick="ilCancel(\''+l.id+'\')">✗ Cancel</button>';}
+      h+='</td></tr>';
+    });
+    h+='</tbody></table></div></div>';
+  }
+  mc.innerHTML=h;
+}
+function openILModal(editId){
+  _ilEditId=editId||null;_ilPhotos=[];
+  var l=editId?instantLoans.filter(function(x){return x.id===editId;})[0]:null;
+  var e=document.getElementById('ilmod');if(e)e.remove();
+  var h='<div class="mo op" id="ilmod"><div class="md mlg" style="margin-top:10px;"><div class="mtt">⚡ '+(l?'Edit':'New')+' Instant Loan</div>';
+  h+='<div class="fsec"><div class="fst">Client Information</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Client Full Name *</label><input class="fi" id="il_name" value="'+esc(l?l.clientName:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Phone *</label><input class="fi" id="il_phone" value="'+esc(l?l.clientPhone:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">NRC / ID</label><input class="fi" id="il_nrc" value="'+esc(l?l.nrc:'')+'"></div>';
+  h+='</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Branch *</label><select class="fsel" id="il_branch">';
+  BRANCHES.forEach(function(b){h+='<option'+(l&&l.branch===b?' selected':(!l&&b==='Kitwe'?' selected':''))+'>'+b+'</option>';});
+  h+='</select></div>';
+  h+='<div class="fg"><label class="fl">Location / Address *</label><input class="fi" id="il_location" value="'+esc(l?l.location:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Occupation</label><input class="fi" id="il_occ" value="'+esc(l?l.occupation:'')+'"></div>';
+  h+='</div></div>';
+  h+='<div class="fsec"><div class="fst">Collateral</div>';
+  h+='<div class="fg"><label class="fl">Collateral Description *</label><textarea class="fi" id="il_col" rows="2">'+esc(l?l.collateral:'')+'</textarea></div>';
+  h+='<div class="fg"><label class="fl">Collateral Photos</label>';
+  h+='<div class="uz" id="il_uz"><input type="file" accept="image/*" multiple onchange="ilHandlePhotos(this)"><div style="font-size:28px;margin-bottom:6px;">📷</div><div style="font-size:12px;color:var(--muted);">Tap to attach collateral photos</div></div>';
+  h+='<div id="il_prev">';
+  if(l&&l.photos&&l.photos.length){l.photos.forEach(function(u){h+='<div class="fitm"><span>📷 Existing photo</span><a href="'+u+'" target="_blank" style="color:var(--gold);font-size:11px;">View</a></div>';});}
+  h+='</div></div></div>';
+  h+='<div class="fsec"><div class="fst">Loan Details</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Amount Given (ZMW) *</label><input class="fi" type="number" id="il_amt" min="100" max="1000000" value="'+(l?l.amountGiven:'')+'" oninput="ilCalc()"></div>';
+  h+='<div class="fg"><label class="fl">Loan Term *</label><select class="fsel" id="il_wks" onchange="ilCalc()">';
+  [1,2,3,4].forEach(function(w){h+='<option value="'+w+'"'+(l&&l.termWeeks===w?' selected':(!l&&w===1?' selected':''))+'>'+w+' Week'+(w>1?'s':'')+' ('+(IL_RATES[w]*100)+'% interest)</option>';});
+  h+='</select></div>';
+  h+='<div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="il_date" value="'+(l?l.dateGiven:td_())+'" onchange="ilCalc()"></div>';
+  h+='</div></div>';
+  h+='<div class="cb" id="il_sum"><div style="font-size:12px;color:var(--muted);">Fill in amount and term to see calculation</div></div>';
+  h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="il_notes" value="'+esc(l?l.notes:'')+'"></div>';
+  h+='<div class="mft"><button class="btn bto" onclick="closeILModal()">Cancel</button><button class="btn btg" onclick="saveIL()">⚡ '+(l?'Update':'Issue Loan')+'</button></div>';
+  h+='</div></div>';
+  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);
+  ilCalc();
+}
+function closeILModal(){var m=document.getElementById('ilmod');if(m)m.remove();}
+function ilHandlePhotos(input){Array.from(input.files).forEach(function(f){var r=new FileReader();r.onload=function(ev){_ilPhotos.push({name:f.name,preview:ev.target.result});var d=document.createElement('div');d.className='fitm';d.innerHTML='<span>'+esc(f.name.substring(0,25))+'</span><span style="color:var(--muted);font-size:10px;">'+Math.round(f.size/1024)+'KB</span>';document.getElementById('il_prev').appendChild(d);};r.readAsDataURL(f);});}
+function ilCalc(){var amt=parseFloat(document.getElementById('il_amt')&&document.getElementById('il_amt').value)||0,wks=parseInt(document.getElementById('il_wks')&&document.getElementById('il_wks').value)||1,date=document.getElementById('il_date')&&document.getElementById('il_date').value,sum=document.getElementById('il_sum');if(!sum)return;if(!amt||!date){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in amount, term and date to see calculation</div>';return;}var int=amt*IL_RATES[wks],tot=amt+int,due=ilDueDate(date,wks);sum.innerHTML='<div style="display:flex;gap:16px;flex-wrap:wrap;"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Amount Given</div><div style="font-size:20px;font-weight:700;">'+zmw(amt)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Interest ('+(IL_RATES[wks]*100)+'%)</div><div style="font-size:20px;font-weight:700;color:var(--warn);">'+zmw(int)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Total Due</div><div style="font-size:20px;font-weight:700;color:var(--gold);">'+zmw(tot)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Due Date</div><div style="font-size:20px;font-weight:700;">'+fmtD(due)+'</div></div></div><div style="font-size:11px;color:var(--muted);margin-top:10px;">⚠️ 10% penalty after 2 days overdue. Collateral sold after 7 days overdue.</div>';}
+function saveIL(){
+  var name=(document.getElementById('il_name').value||'').trim(),phone=(document.getElementById('il_phone').value||'').trim(),branch=document.getElementById('il_branch').value,loc=(document.getElementById('il_location').value||'').trim(),col=(document.getElementById('il_col').value||'').trim(),amt=parseFloat(document.getElementById('il_amt').value)||0,wks=parseInt(document.getElementById('il_wks').value)||1,date=document.getElementById('il_date').value;
+  if(!name||!phone||!branch||!loc||!col||!amt||!date){toast('Please fill all required fields.');return;}
+  if(amt<100||amt>1000000){toast('Amount must be between K100 and K1,000,000.');return;}
+  var due=ilDueDate(date,wks);
+  if(_ilEditId){var l=instantLoans.filter(function(x){return x.id===_ilEditId;})[0];if(l){l.clientName=name;l.clientPhone=phone;l.nrc=(document.getElementById('il_nrc').value||'').trim();l.branch=branch;l.location=loc;l.occupation=(document.getElementById('il_occ').value||'').trim();l.collateral=col;l.amountGiven=amt;l.termWeeks=wks;l.dateGiven=date;l.dueDate=due;l.notes=(document.getElementById('il_notes').value||'').trim();}logAct('Updated instant loan for '+name);if(_ilPhotos.length)_uploadILPhotos(_ilEditId);}
+  else{var nl={id:'IL-'+Date.now(),clientName:name,clientPhone:phone,nrc:(document.getElementById('il_nrc').value||'').trim(),branch:branch,location:loc,occupation:(document.getElementById('il_occ').value||'').trim(),collateral:col,amountGiven:amt,termWeeks:wks,dateGiven:date,dueDate:due,status:'active',notes:(document.getElementById('il_notes').value||'').trim(),createdBy:cu.display,createdAt:now_(),weeksUsed:null,settledDate:null,settledAmount:null,photos:[]};instantLoans.push(nl);logAct('Instant loan — '+name+' — '+zmw(amt));if(_ilPhotos.length)_uploadILPhotos(nl.id);}
+  save();closeILModal();toast('Instant loan saved!');renderInstantLoans(document.getElementById('mainct'));
+}
+function _uploadILPhotos(id){var photos=_ilPhotos.slice(),uploads=[],results=[];photos.forEach(function(p,i){var src=p.preview;if(!src||src.indexOf('data:')!==0)return;var slot=results.length;results.push(null);uploads.push(_uploadOnePhoto(src,'IL_'+id+'_'+i+'_'+Date.now()).then(function(u){if(u)results[slot]=u;}));});Promise.all(uploads).then(function(){var urls=results.filter(Boolean);if(!urls.length)return;var l=instantLoans.filter(function(x){return x.id===id;})[0];if(l){l.photos=(l.photos||[]).concat(urls);save();toast('📷 '+urls.length+' photo(s) saved!');}});}
+function ilSettle(id){var l=instantLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var td=ilTotalDue(l);if(!confirm('Mark FULLY SETTLED?\nClient: '+l.clientName+'\nTotal Due: '+zmw(td)))return;l.status='cleared';l.settledDate=td_();l.settledAmount=td;l.weeksUsed=l.termWeeks;logAct('IL settled — '+l.clientName+' — '+zmw(td));save();toast('Loan settled!');renderInstantLoans(document.getElementById('mainct'));}
+function ilEarlySettle(id){var l=instantLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var today=td_(),days=Math.max(1,Math.floor((new Date(today+'T00:00:00')-new Date(l.dateGiven+'T00:00:00'))/(864e5))),wks=Math.min(l.termWeeks,Math.max(1,Math.ceil(days/7))),rate=IL_RATES[wks]||IL_RATES[l.termWeeks],earlyAmt=Math.round(l.amountGiven*(1+rate)*100)/100;if(!confirm('EARLY SETTLEMENT\nClient: '+l.clientName+'\nWeeks elapsed: '+wks+'\nRate: '+(rate*100)+'%\nAmount: '+zmw(earlyAmt)+'\n\nConfirm?'))return;l.status='cleared';l.settledDate=today;l.settledAmount=earlyAmt;l.weeksUsed=wks;logAct('IL early settle — '+l.clientName+' — wk'+wks+' — '+zmw(earlyAmt));save();toast('Early settlement — client pays '+zmw(earlyAmt));renderInstantLoans(document.getElementById('mainct'));}
+function ilCancel(id){var l=instantLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('CANCEL LOAN & SELL COLLATERAL\nClient: '+l.clientName+'\nCollateral: '+l.collateral+'\n\nConfirm?'))return;l.status='cancelled';l.cancelledDate=td_();l.cancelledBy=cu.display;logAct('IL CANCELLED — '+l.clientName);save();toast('Loan cancelled.');renderInstantLoans(document.getElementById('mainct'));}
+function ilView(id){
+  var l=instantLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
+  var st=ilStatus(l),td=ilTotalDue(l),rate=IL_RATES[l.weeksUsed||l.termWeeks]||IL_RATES[l.termWeeks];
+  var slbl=st==='active'?'Active':st==='cleared'?'Cleared ✓':st==='cancelled'?'Cancelled':st==='overdue_penalty'?'Overdue + Penalty':st==='overdue_cancel'?'Cancel Risk':'Overdue';
+  var mc=document.getElementById('mainct');
+  var h='<button class="bk" onclick="renderInstantLoans(document.getElementById(\'mainct\'))">← Back to Instant Loans</button>';
+  h+='<div style="background:linear-gradient(135deg,#0d1a2e,#1a3a5c);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;">';
+  h+='<div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">INSTANT LOAN · '+esc(l.id)+'</div>';
+  h+='<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.clientName)+'</div>';
+  h+='<div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.branch)+' · '+esc(l.clientPhone||'')+(l.nrc?' · '+esc(l.nrc):'')+'</div>';
+  h+='</div>';
+  h+='<div class="sg">';
+  h+='<div class="sc"><div class="sl">Amount Given</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div>';
+  h+='<div class="sc"><div class="sl">Term / Rate</div><div class="sv">'+l.termWeeks+' wk · '+(rate*100)+'%</div></div>';
+  h+='<div class="sc"><div class="sl">Interest</div><div class="sv" style="color:var(--warn);font-size:16px;">'+zmw(l.amountGiven*rate)+'</div></div>';
+  h+='<div class="sc"><div class="sl">Total Due</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(td)+'</div></div>';
+  h+='<div class="sc"><div class="sl">Status</div><div class="sv" style="font-size:14px;color:'+(st==='cleared'?'var(--ok2)':st.indexOf('overdue')>=0?'var(--red2)':'var(--blue2)')+';">'+slbl+'</div></div>';
+  h+='</div>';
+  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">Loan Details</span></div><div class="cdb">';
+  h+='<div class="rm"><span class="rml">Date Given</span><span class="rmv">'+fmtD(l.dateGiven)+'</span></div>';
+  h+='<div class="rm"><span class="rml">Due Date</span><span class="rmv" style="color:'+(st.indexOf('overdue')>=0?'var(--red2)':'var(--text)')+';">'+fmtD(l.dueDate)+'</span></div>';
+  if(l.settledDate)h+='<div class="rm"><span class="rml">Settled Date</span><span class="rmv" style="color:var(--ok2);">'+fmtD(l.settledDate)+'</span></div>';
+  if(l.settledAmount)h+='<div class="rm"><span class="rml">Amount Settled</span><span class="rmv" style="color:var(--ok2);font-weight:700;">'+zmw(l.settledAmount)+'</span></div>';
+  if(l.weeksUsed&&l.weeksUsed<l.termWeeks)h+='<div class="rm"><span class="rml">Early Settlement</span><span class="rmv" style="color:var(--ok2);">Week '+l.weeksUsed+' of '+l.termWeeks+' ('+(IL_RATES[l.weeksUsed]*100)+'% applied)</span></div>';
+  h+='<div class="rm"><span class="rml">Location</span><span class="rmv">'+esc(l.location||'—')+'</span></div>';
+  h+='<div class="rm"><span class="rml">Occupation</span><span class="rmv">'+esc(l.occupation||'—')+'</span></div>';
+  h+='<div class="rm"><span class="rml">Collateral</span><span class="rmv" style="font-weight:600;color:var(--warn);">'+esc(l.collateral||'—')+'</span></div>';
+  if(l.notes)h+='<div class="rm"><span class="rml">Notes</span><span class="rmv">'+esc(l.notes)+'</span></div>';
+  h+='<div class="rm"><span class="rml">Issued By</span><span class="rmv">'+esc(l.createdBy||'')+'</span></div>';
+  h+='</div></div>';
+  if(l.photos&&l.photos.length){h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📷 Collateral Photos ('+l.photos.length+')</span></div><div style="padding:14px;display:flex;flex-wrap:wrap;gap:10px;">';l.photos.forEach(function(u){h+='<img src="'+u+'" style="height:100px;border-radius:8px;border:1px solid var(--border);cursor:pointer;object-fit:cover;" onclick="window.open(this.src,\'_blank\')">';});h+='</div></div>';}
+  if(canManage()&&st!=='cleared'&&st!=='cancelled'){h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"><button class="btn btok" style="flex:1;padding:12px;" onclick="ilSettle(\''+id+'\')">✓ Full Settlement</button><button class="btn" style="flex:1;padding:12px;background:rgba(41,128,185,.15);border:1px solid rgba(41,128,185,.3);color:var(--blue2);" onclick="ilEarlySettle(\''+id+'\')">📅 Early Settlement</button><button class="btn bto" style="flex:1;padding:12px;" onclick="openILModal(\''+id+'\')">✏️ Edit</button>'+(st==='overdue_cancel'?'<button class="btn btd" style="flex:1;padding:12px;" onclick="ilCancel(\''+id+'\')">✗ Cancel &amp; Sell Collateral</button>':'')+'</div>';}
+  mc.innerHTML=h;
+}
+// ===== LONG TERM LOANS =====
+var LT_TIERS=[{min:20000,max:50000,rate:0.067,svc:0.10},{min:51000,max:150000,rate:0.063,svc:0.10},{min:151000,max:250000,rate:0.053,svc:0.08},{min:251000,max:1000000,rate:0.05,svc:0.05}];
+var _ltEditId=null;
+function ltGetTier(a){for(var i=0;i<LT_TIERS.length;i++)if(a>=LT_TIERS[i].min&&a<=LT_TIERS[i].max)return LT_TIERS[i];return null;}
+function ltMonthDate(dg,m){var d=new Date(dg+'T00:00:00');d.setMonth(d.getMonth()+m);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function ltCalc(amt,months){var t=ltGetTier(amt);if(!t)return null;var svcAmt=Math.round(amt*t.svc*100)/100,disb=Math.round((amt-svcAmt)*100)/100,intTotal=Math.round(amt*t.rate*months*100)/100,totalDue=Math.round((amt+intTotal)*100)/100,monthly=Math.round(totalDue/months*100)/100;return {tier:t,svcAmt:svcAmt,disb:disb,intTotal:intTotal,totalDue:totalDue,monthly:monthly};}
+function ltStatus(l){if(l.status==='cleared')return 'cleared';if(l.status==='cancelled')return 'cancelled';var today=td_(),tp=0;for(var i=0;i<(l.payments||[]).length;i++)tp+=(l.payments[i].amountPaid||0);if(tp>=(l.totalDue-1))return 'cleared';for(var i=0;i<(l.payments||[]).length;i++){var p=l.payments[i];if(!p.amountPaid&&p.dueDate&&today>p.dueDate)return 'overdue';}return 'active';}
+function ltTotalPaid(l){var t=0;for(var i=0;i<(l.payments||[]).length;i++)t+=(l.payments[i].amountPaid||0);return t;}
+function ltBalance(l){return Math.max(0,Math.round(((l.totalDue||0)-ltTotalPaid(l))*100)/100);}
+function renderLongTermLoans(mc){
+  var fs=window._ltFilter||'all';
+  var stats={active:0,overdue:0,cleared:0,out:0,bal:0};
+  longTermLoans.forEach(function(l){var st=ltStatus(l);if(st==='active')stats.active++;else if(st==='overdue')stats.overdue++;else if(st==='cleared')stats.cleared++;if(st!=='cleared'&&st!=='cancelled'){stats.out+=(l.disbursedAmount||0);stats.bal+=ltBalance(l);}});
+  var h='<div class="pgh" style="background:linear-gradient(135deg,#0a1f10,#1a3a24);">';
+  h+='<div><div class="pgt">💼 Long Term Loans</div><div class="pgs">Monthly repayments · 1–12 months · Tiered rates · Service charge deducted upfront</div></div>';
+  if(canManage())h+='<button class="btn btg" onclick="openLTModal()">+ New Long Term Loan</button>';
+  h+='</div>';
+  h+='<div class="sg"><div class="sc"><div class="si">💼</div><div class="sl">Active</div><div class="sv">'+stats.active+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+stats.overdue+'</div></div><div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Cleared</div><div class="sv" style="color:var(--ok2)">'+stats.cleared+'</div></div><div class="sc"><div class="si">💰</div><div class="sl">Disbursed</div><div class="sv" style="font-size:14px;">'+zmw(stats.out)+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">📊</div><div class="sl">Balance Due</div><div class="sv" style="font-size:14px;color:var(--red2);">'+zmw(stats.bal)+'</div></div></div>';
+  h+='<div class="cd" style="margin-bottom:14px;"><div class="cdh"><span class="cdt">Interest Rate Tiers</span></div><div style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;">';
+  var tlabels=['K20k–K50k','K51k–K150k','K151k–K250k','K251k–K1M'];
+  LT_TIERS.forEach(function(t,i){h+='<div style="background:rgba(201,168,76,.05);border:1px solid rgba(201,168,76,.15);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+tlabels[i]+'</div><div style="font-size:16px;font-weight:700;color:var(--gold);">'+(t.rate*100)+'%/mo</div><div style="font-size:10px;color:var(--muted);">Svc: '+(t.svc*100)+'%</div></div>';});
+  h+='</div></div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
+  [['all','All'],['active','Active'],['overdue','Overdue'],['cleared','Cleared']].forEach(function(f){var a=fs===f[0];h+='<button onclick="window._ltFilter=\''+f[0]+'\';renderLongTermLoans(document.getElementById(\'mainct\'))" style="padding:6px 14px;border-radius:20px;border:1.5px solid '+(a?'var(--ok2)':'var(--border)')+';background:'+(a?'rgba(30,132,73,.15)':'transparent')+';color:'+(a?'var(--ok2)':'var(--muted)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:\'DM Sans\',sans-serif;">'+f[1]+'</button>';});
+  h+='</div>';
+  var list=longTermLoans.filter(function(l){var s=ltStatus(l);return fs==='all'||s===fs;}).sort(function(a,b){return b.dateGiven>a.dateGiven?1:-1;});
+  if(!list.length){h+='<div class="cd"><div class="es"><div class="ei">💼</div><div class="et">No long term loans</div></div></div>';}
+  else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Client</th><th>Contact</th><th>Amount</th><th>Rate</th><th>Disbursed</th><th>Monthly</th><th>Paid</th><th>Balance</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';
+  list.forEach(function(l){var st=ltStatus(l),bal=ltBalance(l),paid=ltTotalPaid(l);var sc=st==='active'?'bgg':st==='overdue'?'bgr':st==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.clientName)+'</strong></td><td style="font-size:11px;color:var(--muted);">'+esc(l.contact||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'<div style="font-size:9px;color:var(--muted);">'+(l.interestRate?(l.interestRate*100)+'%/mo':'')+'</div></td><td>'+((l.interestRate||0)*100)+'%</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td style="font-family:monospace;">'+zmw(l.monthlyPayment)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(paid)+'</td><td style="font-family:monospace;font-weight:700;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue':st==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="ltView(\''+l.id+'\')">👁 View</button>'+(canManage()&&st!=='cleared'&&st!=='cancelled'?'<button class="ab" onclick="openLTModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+'</td></tr>';});
+  h+='</tbody></table></div></div>';}
+  mc.innerHTML=h;
+}
+function openLTModal(editId){
+  _ltEditId=editId||null;var l=editId?longTermLoans.filter(function(x){return x.id===editId;})[0]:null;
+  var e=document.getElementById('ltmod');if(e)e.remove();
+  var h='<div class="mo op" id="ltmod"><div class="md mlg" style="margin-top:10px;"><div class="mtt">💼 '+(l?'Edit':'New')+' Long Term Loan</div>';
+  h+='<div class="fsec"><div class="fst">Client Information</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Client Full Name *</label><input class="fi" id="lt_name" value="'+esc(l?l.clientName:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Contact *</label><input class="fi" id="lt_contact" value="'+esc(l?l.contact:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Location *</label><input class="fi" id="lt_loc" value="'+esc(l?l.location:'')+'"></div>';
+  h+='</div></div>';
+  h+='<div class="fsec"><div class="fst">Collateral &amp; Compliance</div>';
+  h+='<div class="fg"><label class="fl">Collateral Description *</label><textarea class="fi" id="lt_col" rows="2">'+esc(l?l.collateral:'')+'</textarea></div>';
+  h+='<div class="fr3">';
+  h+='<div class="fg"><label class="fl">Collateral Type</label><select class="fsel" id="lt_coltype"><option value="Appliances"'+(l&&l.collateralType==='Appliances'?' selected':'')+'>Appliances</option><option value="Vehicle"'+(l&&l.collateralType==='Vehicle'?' selected':'')+'>Vehicle (White Book + Tracker)</option><option value="Title Deed"'+(l&&l.collateralType==='Title Deed'?' selected':'')+'>Title Deed (Caveat)</option><option value="Other"'+(l&&l.collateralType==='Other'?' selected':'')+'>Other</option></select></div>';
+  h+='<div class="fg"><label class="fl">Tracker Installed?</label><select class="fsel" id="lt_tracker"><option value="N/A">N/A</option><option value="Yes"'+(l&&l.trackerStatus==='Yes'?' selected':'')+'>Yes ✓</option><option value="No"'+(l&&l.trackerStatus==='No'?' selected':'')+'>No ✗</option></select></div>';
+  h+='<div class="fg"><label class="fl">Caveat / Search Done?</label><select class="fsel" id="lt_caveat"><option value="N/A">N/A</option><option value="Yes"'+(l&&l.caveatStatus==='Yes'?' selected':'')+'>Yes ✓</option><option value="No"'+(l&&l.caveatStatus==='No'?' selected':'')+'>No ✗</option></select></div>';
+  h+='</div></div>';
+  h+='<div class="fsec"><div class="fst">Loan Details</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Amount Given (ZMW) *</label><input class="fi" type="number" id="lt_amt" min="20000" max="1000000" value="'+(l?l.amountGiven:'')+'" oninput="ltCalcModal()"></div>';
+  h+='<div class="fg"><label class="fl">Term (Months) *</label><select class="fsel" id="lt_mo" onchange="ltCalcModal()">';
+  for(var m=1;m<=12;m++)h+='<option value="'+m+'"'+(l&&l.termMonths===m?' selected':'')+'>'+m+' Month'+(m>1?'s':'')+'</option>';
+  h+='</select></div>';
+  h+='<div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="lt_date" value="'+(l?l.dateGiven:td_())+'" onchange="ltCalcModal()"></div>';
+  h+='</div></div>';
+  h+='<div class="cb" id="lt_sum"><div style="font-size:12px;color:var(--muted);">Fill in amount and term to see calculation</div></div>';
+  h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="lt_notes" value="'+esc(l?l.notes:'')+'"></div>';
+  h+='<div class="mft"><button class="btn bto" onclick="closeLTModal()">Cancel</button><button class="btn btg" onclick="saveLT()">💼 '+(l?'Update':'Issue Loan')+'</button></div>';
+  h+='</div></div>';
+  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);ltCalcModal();
+}
+function closeLTModal(){var m=document.getElementById('ltmod');if(m)m.remove();}
+function ltCalcModal(){var amt=parseFloat(document.getElementById('lt_amt')&&document.getElementById('lt_amt').value)||0,mo=parseInt(document.getElementById('lt_mo')&&document.getElementById('lt_mo').value)||1,sum=document.getElementById('lt_sum');if(!sum)return;if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in amount and term to see calculation</div>';return;}var c=ltCalc(amt,mo);if(!c){sum.innerHTML='<div style="font-size:12px;color:var(--red2);">Amount must be between K20,000 and K1,000,000</div>';return;}var tlabels=['K20k–K50k','K51k–K150k','K151k–K250k','K251k–K1M'];var ti=LT_TIERS.indexOf(c.tier);sum.innerHTML='<div style="display:flex;gap:14px;flex-wrap:wrap;"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Tier</div><div style="font-size:14px;font-weight:700;color:var(--ok2);">'+tlabels[ti]+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Rate</div><div style="font-size:14px;font-weight:700;color:var(--warn);">'+(c.tier.rate*100)+'%/mo</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Svc Charge ('+(c.tier.svc*100)+'%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svcAmt)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Disbursed to Client</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.disb)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Monthly Payment</div><div style="font-size:18px;font-weight:700;">'+zmw(c.monthly)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Total Expected</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.totalDue)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Expected Profit</div><div style="font-size:18px;font-weight:700;color:var(--ok2);">'+zmw(c.intTotal+c.svcAmt)+'</div></div></div>';}
+function saveLT(){
+  var name=(document.getElementById('lt_name').value||'').trim(),contact=(document.getElementById('lt_contact').value||'').trim(),loc=(document.getElementById('lt_loc').value||'').trim(),col=(document.getElementById('lt_col').value||'').trim(),amt=parseFloat(document.getElementById('lt_amt').value)||0,mo=parseInt(document.getElementById('lt_mo').value)||1,date=document.getElementById('lt_date').value;
+  if(!name||!contact||!loc||!col||!amt||!date){toast('Please fill all required fields.');return;}
+  var c=ltCalc(amt,mo);if(!c){toast('Amount must be between K20,000 and K1,000,000.');return;}
+  var pmts=[];for(var m=1;m<=mo;m++)pmts.push({month:m,dueDate:ltMonthDate(date,m),amountDue:c.monthly,amountPaid:0,datePaid:null});
+  if(_ltEditId){var l=longTermLoans.filter(function(x){return x.id===_ltEditId;})[0];if(l){l.clientName=name;l.contact=contact;l.location=loc;l.collateral=col;l.collateralType=document.getElementById('lt_coltype').value;l.trackerStatus=document.getElementById('lt_tracker').value;l.caveatStatus=document.getElementById('lt_caveat').value;l.amountGiven=amt;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svcAmt;l.disbursedAmount=c.disb;l.interestRate=c.tier.rate;l.monthlyPayment=c.monthly;l.totalDue=c.totalDue;l.totalInterest=c.intTotal;l.notes=(document.getElementById('lt_notes').value||'').trim();if(l.payments.length!==mo)l.payments=pmts;}logAct('Updated LT loan — '+name);}
+  else{longTermLoans.push({id:'LT-'+Date.now(),clientName:name,contact:contact,location:loc,collateral:col,collateralType:document.getElementById('lt_coltype').value,trackerStatus:document.getElementById('lt_tracker').value,caveatStatus:document.getElementById('lt_caveat').value,amountGiven:amt,termMonths:mo,dateGiven:date,serviceCharge:c.svcAmt,disbursedAmount:c.disb,interestRate:c.tier.rate,monthlyPayment:c.monthly,totalDue:c.totalDue,totalInterest:c.intTotal,payments:pmts,status:'active',notes:(document.getElementById('lt_notes').value||'').trim(),createdBy:cu.display,createdAt:now_()});logAct('LT loan — '+name+' — '+zmw(amt));}
+  save();closeLTModal();toast('Loan saved!');renderLongTermLoans(document.getElementById('mainct'));
+}
+function ltView(id){
+  var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
+  var st=ltStatus(l),paid=ltTotalPaid(l),bal=ltBalance(l),mc=document.getElementById('mainct');
+  var h='<button class="bk" onclick="renderLongTermLoans(document.getElementById(\'mainct\'))">← Back</button>';
+  h+='<div style="background:linear-gradient(135deg,#0a1f10,#1a3a24);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;">';
+  h+='<div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">LONG TERM LOAN · '+esc(l.id)+'</div>';
+  h+='<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.clientName)+'</div>';
+  h+='<div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.contact)+' · '+esc(l.location)+'</div></div>';
+  h+='<div class="sg"><div class="sc"><div class="sl">Amount Given</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div><div class="sc"><div class="sl">Disbursed</div><div class="sv" style="color:var(--gold);font-size:16px;">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Monthly</div><div class="sv" style="font-size:16px;">'+zmw(l.monthlyPayment)+'</div><div class="ss">'+l.termMonths+' months</div></div><div class="sc"><div class="sl">Total Paid</div><div class="sv" style="color:var(--ok2);font-size:16px;">'+zmw(paid)+'</div><div class="ss">of '+zmw(l.totalDue)+'</div></div><div class="sc" style="border-top-color:'+(bal>0?'var(--red2)':'var(--ok2)')+'"><div class="sl">Balance</div><div class="sv" style="color:'+(bal>0?'var(--red2)':'var(--ok2)')+';font-size:16px;">'+zmw(bal)+'</div></div></div>';
+  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">🔒 Collateral</span></div><div class="cdb"><div class="rm"><span class="rml">Description</span><span class="rmv" style="font-weight:600;color:var(--warn);">'+esc(l.collateral)+'</span></div><div class="rm"><span class="rml">Type</span><span class="rmv">'+esc(l.collateralType||'—')+'</span></div>'+(l.trackerStatus&&l.trackerStatus!=='N/A'?'<div class="rm"><span class="rml">Tracker</span><span class="rmv" style="color:'+(l.trackerStatus==='Yes'?'var(--ok2)':'var(--red2)')+';">'+l.trackerStatus+'</span></div>':'')+(l.caveatStatus&&l.caveatStatus!=='N/A'?'<div class="rm"><span class="rml">Caveat/Search</span><span class="rmv" style="color:'+(l.caveatStatus==='Yes'?'var(--ok2)':'var(--red2)')+';">'+l.caveatStatus+'</span></div>':'')+'</div></div>';
+  var today=td_();
+  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Payment Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Date Paid</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';
+  (l.payments||[]).forEach(function(p,i){var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending';h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-size:12px;">'+(p.datePaid?fmtD(p.datePaid):'—')+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>'+(canManage()?'<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="ltRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="ltUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>':'')+'</tr>';});
+  h+='</tbody></table></div></div>';
+  if(canManage()&&st!=='cleared'&&st!=='cancelled')h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"><button class="btn bto" style="flex:1;padding:12px;" onclick="openLTModal(\''+id+'\')">✏️ Edit</button><button class="btn btd" style="flex:1;padding:12px;" onclick="ltCancelLoan(\''+id+'\')">✗ Cancel</button></div>';
+  mc.innerHTML=h;
+}
+function ltRecordPay(id,i){var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.payments[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' — Balance: '+zmw(def)+'\nEnter amount paid:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();if(ltTotalPaid(l)>=(l.totalDue-1))l.status='cleared';logAct('LT payment — '+l.clientName+' Month '+p.month+' — '+zmw(amt));save();toast('Payment recorded!');ltView(id);}
+function ltUndoPay(id,i){var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.payments[i];if(!confirm('Undo payment for Month '+p.month+'?'))return;p.amountPaid=0;p.datePaid=null;if(l.status==='cleared')l.status='active';save();toast('Payment undone.');ltView(id);}
+function ltCancelLoan(id){var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('Cancel loan for '+l.clientName+'?'))return;l.status='cancelled';l.cancelledDate=td_();save();toast('Cancelled.');renderLongTermLoans(document.getElementById('mainct'));}
+// ===== INVOICE DISCOUNTING =====
+var _invEditId=null;
+function invCalc(amt,months){var svc=Math.round(amt*0.085*100)/100,disb=Math.round(amt*0.80*100)/100,schedule=[],bal=amt*(1.05);for(var m=1;m<=months;m++){var due=m===1?Math.round(amt*1.05*100)/100:Math.round(bal*1.05*100)/100;schedule.push({month:m,amountDue:due});bal=due;}return {svc:svc,disb:disb,schedule:schedule};}
+function invStatus(l){if(l.status==='cleared')return 'cleared';if(l.status==='cancelled')return 'cancelled';var today=td_();for(var i=0;i<(l.months||[]).length;i++){var m=l.months[i];if(!(m.amountPaid>=(m.amountDue-1))&&m.dueDate&&today>m.dueDate)return 'overdue';}return 'active';}
+function invBalance(l){var t=0;for(var i=0;i<(l.months||[]).length;i++)t+=Math.max(0,l.months[i].amountDue-(l.months[i].amountPaid||0));return t;}
+function renderInvoiceLoans(mc){
+  var fs=window._invFilter||'all';
+  var stats={active:0,overdue:0,cleared:0,out:0};
+  invoiceLoans.forEach(function(l){var s=invStatus(l);if(s==='active')stats.active++;else if(s==='overdue')stats.overdue++;else if(s==='cleared')stats.cleared++;if(s!=='cleared'&&s!=='cancelled')stats.out+=(l.disbursedAmount||0);});
+  var h='<div class="pgh" style="background:linear-gradient(135deg,#0d0d2e,#1a1a5c);">';
+  h+='<div><div class="pgt">📄 Invoice Discounting</div><div class="pgs">80% advance · 5%/month compounding · 8.5% service charge · Max 3 months</div></div>';
+  if(canManage())h+='<button class="btn btg" onclick="openInvModal()">+ New Invoice</button>';
+  h+='</div>';
+  h+='<div class="sg"><div class="sc"><div class="si">📄</div><div class="sl">Active</div><div class="sv">'+stats.active+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+stats.overdue+'</div></div><div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Cleared</div><div class="sv" style="color:var(--ok2)">'+stats.cleared+'</div></div><div class="sc"><div class="si">💰</div><div class="sl">Outstanding</div><div class="sv" style="font-size:14px;">'+zmw(stats.out)+'</div></div></div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
+  [['all','All'],['active','Active'],['overdue','Overdue'],['cleared','Cleared']].forEach(function(f){var a=fs===f[0];h+='<button onclick="window._invFilter=\''+f[0]+'\';renderInvoiceLoans(document.getElementById(\'mainct\'))" style="padding:6px 14px;border-radius:20px;border:1.5px solid '+(a?'var(--purple2)':'var(--border)')+';background:'+(a?'rgba(108,52,131,.2)':'transparent')+';color:'+(a?'var(--purple2)':'var(--muted)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:\'DM Sans\',sans-serif;">'+f[1]+'</button>';});
+  h+='</div>';
+  var list=invoiceLoans.filter(function(l){var s=invStatus(l);return fs==='all'||s===fs;}).sort(function(a,b){return b.dateGiven>a.dateGiven?1:-1;});
+  if(!list.length){h+='<div class="cd"><div class="es"><div class="ei">📄</div><div class="et">No invoice discounting loans</div></div></div>';}
+  else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Company</th><th>Director</th><th>Invoice Amt</th><th>Disbursed (80%)</th><th>Term</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';
+  list.forEach(function(l){var s=invStatus(l),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.companyName)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(l.directorName||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td>'+l.termMonths+' mo</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="invView(\''+l.id+'\')">👁 View</button>'+(canManage()&&s!=='cleared'&&s!=='cancelled'?'<button class="ab" onclick="openInvModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+'</td></tr>';});
+  h+='</tbody></table></div></div>';}
+  mc.innerHTML=h;
+}
+function openInvModal(editId){
+  _invEditId=editId||null;var l=editId?invoiceLoans.filter(function(x){return x.id===editId;})[0]:null;
+  var e=document.getElementById('invmod');if(e)e.remove();
+  var h='<div class="mo op" id="invmod"><div class="md mlg" style="margin-top:10px;"><div class="mtt">📄 '+(l?'Edit':'New')+' Invoice Discounting</div>';
+  h+='<div class="fsec"><div class="fst">Company Information</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Company Name *</label><input class="fi" id="inv_co" value="'+esc(l?l.companyName:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Director Name(s) *</label><input class="fi" id="inv_dir" value="'+esc(l?l.directorName:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Contact *</label><input class="fi" id="inv_contact" value="'+esc(l?l.contact:'')+'"></div>';
+  h+='</div><div class="fg"><label class="fl">Location *</label><input class="fi" id="inv_loc" value="'+esc(l?l.location:'')+'"></div></div>';
+  h+='<div class="fsec"><div class="fst">Invoice Details</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Invoice Amount (ZMW) *</label><input class="fi" type="number" id="inv_amt" value="'+(l?l.amountGiven:'')+'" oninput="invCalcModal()"></div>';
+  h+='<div class="fg"><label class="fl">Term (Months, max 3) *</label><select class="fsel" id="inv_mo" onchange="invCalcModal()">';
+  for(var m=1;m<=3;m++)h+='<option value="'+m+'"'+(l&&l.termMonths===m?' selected':'')+'>'+m+' Month'+(m>1?'s':'')+'</option>';
+  h+='</select></div>';
+  h+='<div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="inv_date" value="'+(l?l.dateGiven:td_())+'" onchange="invCalcModal()"></div>';
+  h+='</div></div>';
+  h+='<div class="cb" id="inv_sum"><div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div></div>';
+  h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="inv_notes" value="'+esc(l?l.notes:'')+'"></div>';
+  h+='<div class="mft"><button class="btn bto" onclick="closeInvModal()">Cancel</button><button class="btn btg" onclick="saveInv()">📄 '+(l?'Update':'Issue')+'</button></div>';
+  h+='</div></div>';
+  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);invCalcModal();
+}
+function closeInvModal(){var m=document.getElementById('invmod');if(m)m.remove();}
+function invCalcModal(){var amt=parseFloat(document.getElementById('inv_amt')&&document.getElementById('inv_amt').value)||0,mo=parseInt(document.getElementById('inv_mo')&&document.getElementById('inv_mo').value)||1,date=document.getElementById('inv_date')&&document.getElementById('inv_date').value,sum=document.getElementById('inv_sum');if(!sum)return;if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div>';return;}var c=invCalc(amt,mo);var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Invoice Amount</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Service Charge (8.5%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svc)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Disbursed (80%)</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.disb)+'</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;">';c.schedule.forEach(function(s){var dd=date?ltMonthDate(date,s.month):'—';h+='<div style="background:rgba(108,52,131,.1);border:1px solid rgba(108,52,131,.2);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:10px;color:var(--muted);">Month '+s.month+'</div><div style="font-size:15px;font-weight:700;color:var(--purple2);">'+zmw(s.amountDue)+'</div><div style="font-size:9px;color:var(--muted);">Due: '+fmtD(dd)+'</div></div>';});h+='</div>';sum.innerHTML=h;}
+function saveInv(){var co=(document.getElementById('inv_co').value||'').trim(),dir=(document.getElementById('inv_dir').value||'').trim(),contact=(document.getElementById('inv_contact').value||'').trim(),loc=(document.getElementById('inv_loc').value||'').trim(),amt=parseFloat(document.getElementById('inv_amt').value)||0,mo=parseInt(document.getElementById('inv_mo').value)||1,date=document.getElementById('inv_date').value;if(!co||!dir||!contact||!loc||!amt||!date){toast('Please fill all required fields.');return;}var c=invCalc(amt,mo);var pmts=[];for(var m=0;m<mo;m++)pmts.push({month:m+1,dueDate:ltMonthDate(date,m+1),amountDue:c.schedule[m].amountDue,amountPaid:0,datePaid:null});if(_invEditId){var l=invoiceLoans.filter(function(x){return x.id===_invEditId;})[0];if(l){l.companyName=co;l.directorName=dir;l.contact=contact;l.location=loc;l.amountGiven=amt;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svc;l.disbursedAmount=c.disb;l.notes=(document.getElementById('inv_notes').value||'').trim();if(l.months.length!==mo)l.months=pmts;}logAct('Updated invoice — '+co);}else{invoiceLoans.push({id:'INV-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,amountGiven:amt,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,months:pmts,status:'active',notes:(document.getElementById('inv_notes').value||'').trim(),createdBy:cu.display,createdAt:now_()});logAct('Invoice — '+co+' — '+zmw(amt));}save();closeInvModal();toast('Invoice loan saved!');renderInvoiceLoans(document.getElementById('mainct'));}
+function invView(id){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var st=invStatus(l),mc=document.getElementById('mainct');var h='<button class="bk" onclick="renderInvoiceLoans(document.getElementById(\'mainct\'))">← Back</button><div style="background:linear-gradient(135deg,#0d0d2e,#1a1a5c);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;"><div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">INVOICE DISCOUNTING · '+esc(l.id)+'</div><div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.companyName)+'</div><div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.directorName)+' · '+esc(l.contact)+'</div></div>';h+='<div class="sg"><div class="sc"><div class="sl">Invoice Amount</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div><div class="sc"><div class="sl">Disbursed (80%)</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Term</div><div class="sv">'+l.termMonths+' month'+(l.termMonths>1?'s':'')+'</div></div></div>';var today=td_();h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Monthly Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Balance</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';(l.months||[]).forEach(function(p,i){var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending',bal=Math.max(0,p.amountDue-(p.amountPaid||0));h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-family:monospace;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>'+(canManage()?'<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="invRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="invUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>':'')+'</tr>';});h+='</tbody></table></div></div>';mc.innerHTML=h;}
+function invRecordPay(id,i){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' balance: '+zmw(def)+'\nEnter amount:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();var all=true;for(var j=0;j<l.months.length;j++)if(l.months[j].amountPaid<l.months[j].amountDue-1){all=false;break;}if(all)l.status='cleared';logAct('Invoice pay — '+l.companyName+' M'+p.month+' — '+zmw(amt));save();toast('Payment recorded!');invView(id);}
+function invUndoPay(id,i){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i];if(!confirm('Undo Month '+p.month+'?'))return;p.amountPaid=0;p.datePaid=null;if(l.status==='cleared')l.status='active';save();toast('Undone.');invView(id);}
+// ===== ORDER FINANCING =====
+var _ordEditId=null;
+function ordCalc(amt,months){var svc=Math.round(amt*0.085*100)/100,disb=Math.round(amt*0.70*100)/100,schedule=[],bal=amt*(1.05);for(var m=1;m<=months;m++){var due=m===1?Math.round(amt*1.05*100)/100:Math.round(bal*1.05*100)/100;schedule.push({month:m,amountDue:due});bal=due;}return {svc:svc,disb:disb,schedule:schedule};}
+function renderOrderLoans(mc){
+  var fs=window._ordFilter||'all';
+  var stats={active:0,overdue:0,cleared:0,out:0};
+  orderLoans.forEach(function(l){var s=invStatus({status:l.status,months:l.months});if(s==='active')stats.active++;else if(s==='overdue')stats.overdue++;else if(s==='cleared')stats.cleared++;if(s!=='cleared'&&s!=='cancelled')stats.out+=(l.disbursedAmount||0);});
+  var h='<div class="pgh" style="background:linear-gradient(135deg,#1a0a2e,#3d1a6e);">';
+  h+='<div><div class="pgt">📦 Order Financing</div><div class="pgs">70% advance · 5%/month compounding · 8.5% service charge · Max 3 months</div></div>';
+  if(canManage())h+='<button class="btn btg" onclick="openOrdModal()">+ New Order</button>';
+  h+='</div>';
+  h+='<div class="sg"><div class="sc"><div class="si">📦</div><div class="sl">Active</div><div class="sv">'+stats.active+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+stats.overdue+'</div></div><div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Cleared</div><div class="sv" style="color:var(--ok2)">'+stats.cleared+'</div></div><div class="sc"><div class="si">💰</div><div class="sl">Outstanding</div><div class="sv" style="font-size:14px;">'+zmw(stats.out)+'</div></div></div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
+  [['all','All'],['active','Active'],['overdue','Overdue'],['cleared','Cleared']].forEach(function(f){var a=fs===f[0];h+='<button onclick="window._ordFilter=\''+f[0]+'\';renderOrderLoans(document.getElementById(\'mainct\'))" style="padding:6px 14px;border-radius:20px;border:1.5px solid '+(a?'#8e44ad':'var(--border)')+';background:'+(a?'rgba(142,68,173,.2)':'transparent')+';color:'+(a?'#9b59b6':'var(--muted)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:\'DM Sans\',sans-serif;">'+f[1]+'</button>';});
+  h+='</div>';
+  var list=orderLoans.filter(function(l){var s=invStatus({status:l.status,months:l.months});return fs==='all'||s===fs;}).sort(function(a,b){return b.dateGiven>a.dateGiven?1:-1;});
+  if(!list.length){h+='<div class="cd"><div class="es"><div class="ei">📦</div><div class="et">No order financing loans</div></div></div>';}
+  else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Company</th><th>Contact</th><th>Order Amount</th><th>Disbursed (70%)</th><th>Term</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';list.forEach(function(l){var s=invStatus({status:l.status,months:l.months}),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.companyName)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(l.contact||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td>'+l.termMonths+' mo</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="ordView(\''+l.id+'\')">👁 View</button>'+(canManage()&&s!=='cleared'&&s!=='cancelled'?'<button class="ab" onclick="openOrdModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+'</td></tr>';});h+='</tbody></table></div></div>';}
+  mc.innerHTML=h;
+}
+function openOrdModal(editId){_ordEditId=editId||null;var l=editId?orderLoans.filter(function(x){return x.id===editId;})[0]:null;var e=document.getElementById('ordmod');if(e)e.remove();var h='<div class="mo op" id="ordmod"><div class="md mlg" style="margin-top:10px;"><div class="mtt">📦 '+(l?'Edit':'New')+' Order Financing</div><div class="fsec"><div class="fst">Company Information</div><div class="fr3"><div class="fg"><label class="fl">Company Name *</label><input class="fi" id="ord_co" value="'+esc(l?l.companyName:'')+'"></div><div class="fg"><label class="fl">Contact *</label><input class="fi" id="ord_contact" value="'+esc(l?l.contact:'')+'"></div><div class="fg"><label class="fl">Location *</label><input class="fi" id="ord_loc" value="'+esc(l?l.location:'')+'"></div></div></div><div class="fsec"><div class="fst">Loan Details</div><div class="fr3"><div class="fg"><label class="fl">Order Amount (ZMW) *</label><input class="fi" type="number" id="ord_amt" value="'+(l?l.amountGiven:'')+'" oninput="ordCalcModal()"></div><div class="fg"><label class="fl">Term (max 3 months) *</label><select class="fsel" id="ord_mo" onchange="ordCalcModal()">';for(var m=1;m<=3;m++)h+='<option value="'+m+'"'+(l&&l.termMonths===m?' selected':'')+'>'+m+' Month'+(m>1?'s':'')+'</option>';h+='</select></div><div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="ord_date" value="'+(l?l.dateGiven:td_())+'" onchange="ordCalcModal()"></div></div></div><div class="cb" id="ord_sum"><div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div></div><div class="fg"><label class="fl">Notes</label><input class="fi" id="ord_notes" value="'+esc(l?l.notes:'')+'"></div><div class="mft"><button class="btn bto" onclick="closeOrdModal()">Cancel</button><button class="btn btg" onclick="saveOrd()">📦 '+(l?'Update':'Issue')+'</button></div></div></div>';var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);ordCalcModal();}
+function closeOrdModal(){var m=document.getElementById('ordmod');if(m)m.remove();}
+function ordCalcModal(){var amt=parseFloat(document.getElementById('ord_amt')&&document.getElementById('ord_amt').value)||0,mo=parseInt(document.getElementById('ord_mo')&&document.getElementById('ord_mo').value)||1,date=document.getElementById('ord_date')&&document.getElementById('ord_date').value,sum=document.getElementById('ord_sum');if(!sum)return;if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div>';return;}var c=ordCalc(amt,mo);var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Order Amount</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Service Charge (8.5%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svc)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Disbursed (70%)</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.disb)+'</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;">';c.schedule.forEach(function(s){var dd=date?ltMonthDate(date,s.month):'—';h+='<div style="background:rgba(142,68,173,.1);border:1px solid rgba(142,68,173,.2);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:10px;color:var(--muted);">Month '+s.month+'</div><div style="font-size:15px;font-weight:700;color:#9b59b6;">'+zmw(s.amountDue)+'</div><div style="font-size:9px;color:var(--muted);">Due: '+fmtD(dd)+'</div></div>';});h+='</div>';sum.innerHTML=h;}
+function saveOrd(){var co=(document.getElementById('ord_co').value||'').trim(),contact=(document.getElementById('ord_contact').value||'').trim(),loc=(document.getElementById('ord_loc').value||'').trim(),amt=parseFloat(document.getElementById('ord_amt').value)||0,mo=parseInt(document.getElementById('ord_mo').value)||1,date=document.getElementById('ord_date').value;if(!co||!contact||!loc||!amt||!date){toast('Please fill all required fields.');return;}var c=ordCalc(amt,mo);var pmts=[];for(var m=0;m<mo;m++)pmts.push({month:m+1,dueDate:ltMonthDate(date,m+1),amountDue:c.schedule[m].amountDue,amountPaid:0,datePaid:null});if(_ordEditId){var l=orderLoans.filter(function(x){return x.id===_ordEditId;})[0];if(l){l.companyName=co;l.contact=contact;l.location=loc;l.amountGiven=amt;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svc;l.disbursedAmount=c.disb;l.notes=(document.getElementById('ord_notes').value||'').trim();if(l.months.length!==mo)l.months=pmts;}logAct('Updated order — '+co);}else{orderLoans.push({id:'ORD-'+Date.now(),companyName:co,contact:contact,location:loc,amountGiven:amt,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,months:pmts,status:'active',notes:(document.getElementById('ord_notes').value||'').trim(),createdBy:cu.display,createdAt:now_()});logAct('Order — '+co+' — '+zmw(amt));}save();closeOrdModal();toast('Order loan saved!');renderOrderLoans(document.getElementById('mainct'));}
+function ordView(id){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var st=invStatus({status:l.status,months:l.months}),mc=document.getElementById('mainct');var h='<button class="bk" onclick="renderOrderLoans(document.getElementById(\'mainct\'))">← Back</button><div style="background:linear-gradient(135deg,#1a0a2e,#3d1a6e);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;"><div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">ORDER FINANCING · '+esc(l.id)+'</div><div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.companyName)+'</div><div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.contact)+' · '+esc(l.location)+'</div></div>';h+='<div class="sg"><div class="sc"><div class="sl">Order Amount</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div><div class="sc"><div class="sl">Disbursed (70%)</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Term</div><div class="sv">'+l.termMonths+' month'+(l.termMonths>1?'s':'')+'</div></div></div>';var today=td_();h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Monthly Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Balance</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';(l.months||[]).forEach(function(p,i){var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending',bal=Math.max(0,p.amountDue-(p.amountPaid||0));h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-family:monospace;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>'+(canManage()?'<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="ordRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="ordUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>':'')+'</tr>';});h+='</tbody></table></div></div>';mc.innerHTML=h;}
+function ordRecordPay(id,i){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' balance: '+zmw(def)+'\nEnter amount:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();var all=true;for(var j=0;j<l.months.length;j++)if(l.months[j].amountPaid<l.months[j].amountDue-1){all=false;break;}if(all)l.status='cleared';logAct('Order pay — '+l.companyName+' M'+p.month+' — '+zmw(amt));save();toast('Payment recorded!');ordView(id);}
+function ordUndoPay(id,i){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i];if(!confirm('Undo?'))return;p.amountPaid=0;p.datePaid=null;if(l.status==='cleared')l.status='active';save();toast('Undone.');ordView(id);}
+// ===== SALARY ADVANCE =====
+function findSalCo(id){for(var i=0;i<salaryLoans.length;i++)if(salaryLoans[i].id===id)return salaryLoans[i];return null;}
+function salCalcEmp(amt,months){var svc=Math.round(amt*0.06*100)/100,disb=Math.round((amt-svc)*100)/100,intTotal=Math.round(amt*0.13*months*100)/100,totalDue=Math.round((amt+intTotal)*100)/100,monthly=Math.round(totalDue/months*100)/100,commission=Math.round(intTotal*0.03*100)/100;return {svc:svc,disb:disb,intTotal:intTotal,totalDue:totalDue,monthly:monthly,commission:commission};}
+function empStatus(e){if(e.status==='cleared')return 'cleared';if(e.status==='cancelled')return 'cancelled';var today=td_(),tp=0;for(var i=0;i<(e.payments||[]).length;i++)tp+=(e.payments[i].amountPaid||0);if(tp>=(e.totalDue-1))return 'cleared';for(var i=0;i<(e.payments||[]).length;i++){var p=e.payments[i];if(!p.amountPaid&&p.dueDate&&today>p.dueDate)return 'overdue';}return 'active';}
+function empTotalPaid(e){var t=0;for(var i=0;i<(e.payments||[]).length;i++)t+=(e.payments[i].amountPaid||0);return t;}
+function empBalance(e){return Math.max(0,Math.round(((e.totalDue||0)-empTotalPaid(e))*100)/100);}
+function renderSalaryLoans(mc){
+  var totalEmps=0,active=0,overdue=0,totalOut=0;
+  salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){totalEmps++;var s=empStatus(e);if(s==='active')active++;else if(s==='overdue')overdue++;if(s!=='cleared'&&s!=='cancelled')totalOut+=(e.amountGiven||0);});});
+  var h='<div class="pgh" style="background:linear-gradient(135deg,#1f0a05,#5c3d1a);">';
+  h+='<div><div class="pgt">👤 Salary Advance</div><div class="pgs">Private companies only · MOU required · 13%/month · 6% service charge · 3% commission</div></div>';
+  if(canManage())h+='<button class="btn btg" onclick="openSalCoModal()">+ Add Company</button>';
+  h+='</div>';
+  h+='<div class="sg"><div class="sc"><div class="si">🏢</div><div class="sl">Companies</div><div class="sv">'+salaryLoans.length+'</div></div><div class="sc"><div class="si">👤</div><div class="sl">Total Employees</div><div class="sv">'+totalEmps+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+overdue+'</div></div><div class="sc"><div class="si">💰</div><div class="sl">Outstanding</div><div class="sv" style="font-size:14px;">'+zmw(totalOut)+'</div></div></div>';
+  if(!salaryLoans.length){h+='<div class="cd"><div class="es"><div class="ei">🏢</div><div class="et">No companies yet</div></div></div>';}
+  else{salaryLoans.forEach(function(co){var ec=(co.employees||[]).length,ac=(co.employees||[]).filter(function(e){return empStatus(e)==='active';}).length,oc=(co.employees||[]).filter(function(e){return empStatus(e)==='overdue';}).length,out2=0;(co.employees||[]).forEach(function(e){if(empStatus(e)!=='cleared'&&empStatus(e)!=='cancelled')out2+=(e.amountGiven||0);});h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><div style="display:flex;align-items:center;gap:12px;flex:1;cursor:pointer;" onclick="salViewCo(\''+co.id+'\')" ><div style="width:40px;height:40px;background:rgba(212,130,10,.1);border:1px solid rgba(212,130,10,.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;">🏢</div><div><div style="font-size:15px;font-weight:700;">'+esc(co.companyName)+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(co.mouSigned?'✓ MOU Signed':'⚠️ MOU Pending')+' · '+ec+' employee'+(ec!==1?'s':'')+'</div></div></div><div style="display:flex;gap:8px;align-items:center;">'+(oc>0?'<span class="bg bgr">'+oc+' overdue</span>':'')+(ac>0?'<span class="bg bgg">'+ac+' active</span>':'')+'<span style="font-family:monospace;font-size:13px;color:var(--gold);">'+zmw(out2)+'</span><button class="ab" onclick="salViewCo(\''+co.id+'\')">View →</button>'+(canManage()?'<button class="ab" onclick="openSalCoModal(\''+co.id+'\')" style="margin-left:4px;">✏️</button>':'')+'</div></div></div>';});}
+  mc.innerHTML=h;
+}
+function openSalCoModal(editId){var co=editId?findSalCo(editId):null;var e=document.getElementById('salcomod');if(e)e.remove();var h='<div class="mo op" id="salcomod"><div class="md" style="margin-top:10px;"><div class="mtt">🏢 '+(co?'Edit':'Add')+' Company</div><div class="fg"><label class="fl">Company Name *</label><input class="fi" id="salco_name" value="'+esc(co?co.companyName:'')+'"></div><div class="fg"><label class="fl">Contact Person *</label><input class="fi" id="salco_contact" value="'+esc(co?co.contact:'')+'"></div><div class="fg"><label class="fl">Phone *</label><input class="fi" id="salco_phone" value="'+esc(co?co.phone:'')+'"></div><div class="fg"><label class="fl">Address</label><input class="fi" id="salco_addr" value="'+esc(co?co.address:'')+'"></div><div class="fg"><label class="fl">MOU Signed?</label><select class="fsel" id="salco_mou"><option value="no"'+(co&&!co.mouSigned?' selected':(!co?' selected':''))+'>No — Pending</option><option value="yes"'+(co&&co.mouSigned?' selected':'')+'>Yes ✓</option></select></div><div style="background:rgba(212,130,10,.08);border:1px solid rgba(212,130,10,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--warn);margin-bottom:14px;">⚠️ Salary advances are for private company employees only. MOU must be signed before disbursement. Minimum 50 employees.</div><div class="mft"><button class="btn bto" onclick="closeSalCoModal()">Cancel</button><button class="btn btg" onclick="saveSalCo('+(editId?'\''+editId+'\'':'null')+')">🏢 '+(co?'Update':'Add Company')+'</button></div></div></div>';var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);}
+function closeSalCoModal(){var m=document.getElementById('salcomod');if(m)m.remove();}
+function saveSalCo(editId){var name=(document.getElementById('salco_name').value||'').trim(),contact=(document.getElementById('salco_contact').value||'').trim(),phone=(document.getElementById('salco_phone').value||'').trim();if(!name||!contact||!phone){toast('Fill required fields.');return;}var mou=document.getElementById('salco_mou').value==='yes';if(editId){var co=findSalCo(editId);if(co){co.companyName=name;co.contact=contact;co.phone=phone;co.address=(document.getElementById('salco_addr').value||'').trim();co.mouSigned=mou;}logAct('Updated company — '+name);}else{salaryLoans.push({id:'SAL-'+Date.now(),companyName:name,contact:contact,phone:phone,address:(document.getElementById('salco_addr').value||'').trim(),mouSigned:mou,employees:[],createdBy:cu.display,createdAt:now_()});logAct('Added company — '+name);}save();closeSalCoModal();toast('Company saved!');renderSalaryLoans(document.getElementById('mainct'));}
+function salViewCo(coId){
+  var co=findSalCo(coId);if(!co)return;
+  var mc=document.getElementById('mainct');
+  var totalOut=0,ac=0,oc=0,cc=0;
+  (co.employees||[]).forEach(function(e){var s=empStatus(e);if(s==='active')ac++;else if(s==='overdue')oc++;else if(s==='cleared')cc++;if(s!=='cleared'&&s!=='cancelled')totalOut+=(e.amountGiven||0);});
+  var h='<button class="bk" onclick="renderSalaryLoans(document.getElementById(\'mainct\'))">← Back to Companies</button>';
+  h+='<div style="background:linear-gradient(135deg,#1f0a05,#5c3d1a);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">';
+  h+='<div><div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">SALARY ADVANCE COMPANY</div><div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(co.companyName)+'</div><div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(co.contact)+' · '+esc(co.phone)+'</div><div style="font-size:11px;opacity:.75;margin-top:4px;">'+(co.mouSigned?'✓ MOU Signed':'⚠️ MOU Pending — do not disburse until signed')+'</div></div>';
+  if(canManage())h+='<button class="btn btg" onclick="openSalEmpModal(\''+coId+'\',null)">+ Add Employee</button>';
+  h+='</div>';
+  h+='<div class="sg"><div class="sc"><div class="si">👤</div><div class="sl">Employees</div><div class="sv">'+(co.employees||[]).length+'</div></div><div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Active</div><div class="sv" style="color:var(--ok2)">'+ac+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+oc+'</div></div><div class="sc" style="border-top-color:var(--blue2)"><div class="si">🏁</div><div class="sl">Cleared</div><div class="sv" style="color:var(--blue2)">'+cc+'</div></div><div class="sc"><div class="si">💰</div><div class="sl">Outstanding</div><div class="sv" style="font-size:14px;">'+zmw(totalOut)+'</div></div></div>';
+  if(!(co.employees||[]).length){h+='<div class="cd"><div class="es"><div class="ei">👤</div><div class="et">No employees yet</div></div></div>';}
+  else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Employee</th><th>Contact</th><th>Amount</th><th>Disbursed</th><th>Monthly</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead><tbody>';(co.employees||[]).forEach(function(emp){var s=empStatus(emp),bal=empBalance(emp),paid=empTotalPaid(emp),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(emp.employeeName)+'</strong></td><td style="font-size:11px;color:var(--muted);">'+esc(emp.contact||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(emp.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(emp.disbursedAmount)+'</td><td style="font-family:monospace;">'+zmw(emp.monthlyPayment)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(paid)+'</td><td style="font-family:monospace;font-weight:700;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="salEmpView(\''+coId+'\',\''+emp.id+'\')">👁 View</button>'+(canManage()&&s!=='cleared'&&s!=='cancelled'?'<button class="ab" onclick="openSalEmpModal(\''+coId+'\',\''+emp.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+'</td></tr>';});h+='</tbody></table></div></div>';}
+  mc.innerHTML=h;
+}
+function openSalEmpModal(coId,empId){var co=findSalCo(coId);if(!co)return;var emp=empId?(co.employees||[]).filter(function(e){return e.id===empId;})[0]:null;var e=document.getElementById('salemmod');if(e)e.remove();var h='<div class="mo op" id="salemmod"><div class="md mlg" style="margin-top:10px;"><div class="mtt">👤 '+(emp?'Edit':'Add')+' Employee — '+esc(co.companyName)+'</div><div class="fsec"><div class="fst">Employee Information</div><div class="fr3"><div class="fg"><label class="fl">Employee Name *</label><input class="fi" id="salem_name" value="'+esc(emp?emp.employeeName:'')+'"></div><div class="fg"><label class="fl">Contact *</label><input class="fi" id="salem_contact" value="'+esc(emp?emp.contact:'')+'"></div><div class="fg"><label class="fl">Location</label><input class="fi" id="salem_loc" value="'+esc(emp?emp.location:'')+'"></div></div></div><div class="fsec"><div class="fst">Loan Details</div><div class="fr3"><div class="fg"><label class="fl">Amount Given (ZMW) *</label><input class="fi" type="number" id="salem_amt" value="'+(emp?emp.amountGiven:'')+'" oninput="salEmpCalc()"></div><div class="fg"><label class="fl">Term (max 6 months) *</label><select class="fsel" id="salem_mo" onchange="salEmpCalc()">';for(var m=1;m<=6;m++)h+='<option value="'+m+'"'+(emp&&emp.termMonths===m?' selected':'')+'>'+m+' Month'+(m>1?'s':'')+'</option>';h+='</select></div><div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="salem_date" value="'+(emp?emp.dateGiven:td_())+'" onchange="salEmpCalc()"></div></div></div><div class="cb" id="salem_sum"><div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div></div><div class="fg"><label class="fl">Notes</label><input class="fi" id="salem_notes" value="'+esc(emp?emp.notes:'')+'"></div><div class="mft"><button class="btn bto" onclick="closeSalEmpModal()">Cancel</button><button class="btn btg" onclick="saveSalEmp(\''+coId+'\','+(empId?'\''+empId+'\'':'null')+')">👤 '+(emp?'Update':'Add Employee')+'</button></div></div></div>';var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);salEmpCalc();}
+function closeSalEmpModal(){var m=document.getElementById('salemmod');if(m)m.remove();}
+function salEmpCalc(){var amt=parseFloat(document.getElementById('salem_amt')&&document.getElementById('salem_amt').value)||0,mo=parseInt(document.getElementById('salem_mo')&&document.getElementById('salem_mo').value)||1,date=document.getElementById('salem_date')&&document.getElementById('salem_date').value,sum=document.getElementById('salem_sum');if(!sum)return;if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div>';return;}var c=salCalcEmp(amt,mo);var h='<div style="display:flex;gap:14px;flex-wrap:wrap;"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Amount Given</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Service Charge (6%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svc)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Disbursed</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.disb)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Interest (13%×'+mo+'mo)</div><div style="font-size:18px;font-weight:700;color:var(--warn);">'+zmw(c.intTotal)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Monthly Deduction</div><div style="font-size:18px;font-weight:700;">'+zmw(c.monthly)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Total Expected</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.totalDue)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Commission (3%)</div><div style="font-size:18px;font-weight:700;color:var(--ok2);">'+zmw(c.commission)+'</div></div></div>';if(date){h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">';for(var m2=1;m2<=mo;m2++){var dd=ltMonthDate(date,m2);h+='<div style="background:rgba(212,130,10,.08);border:1px solid rgba(212,130,10,.15);border-radius:6px;padding:6px 10px;text-align:center;"><div style="font-size:9px;color:var(--muted);">Month '+m2+'</div><div style="font-size:13px;font-weight:700;color:var(--warn);">'+zmw(c.monthly)+'</div><div style="font-size:9px;color:var(--muted);">'+fmtD(dd)+'</div></div>';}h+='</div>';}sum.innerHTML=h;}
+function saveSalEmp(coId,empId){var co=findSalCo(coId);if(!co)return;var name=(document.getElementById('salem_name').value||'').trim(),contact=(document.getElementById('salem_contact').value||'').trim(),amt=parseFloat(document.getElementById('salem_amt').value)||0,mo=parseInt(document.getElementById('salem_mo').value)||1,date=document.getElementById('salem_date').value;if(!name||!contact||!amt||!date){toast('Fill required fields.');return;}var c=salCalcEmp(amt,mo);var pmts=[];for(var m=1;m<=mo;m++)pmts.push({month:m,dueDate:ltMonthDate(date,m),amountDue:c.monthly,amountPaid:0,datePaid:null});if(!co.employees)co.employees=[];if(empId){var emp=(co.employees||[]).filter(function(e){return e.id===empId;})[0];if(emp){emp.employeeName=name;emp.contact=contact;emp.location=(document.getElementById('salem_loc').value||'').trim();emp.amountGiven=amt;emp.termMonths=mo;emp.dateGiven=date;emp.serviceCharge=c.svc;emp.disbursedAmount=c.disb;emp.monthlyPayment=c.monthly;emp.totalDue=c.totalDue;emp.totalInterest=c.intTotal;emp.commission=c.commission;emp.notes=(document.getElementById('salem_notes').value||'').trim();if(emp.payments.length!==mo)emp.payments=pmts;}logAct('Updated employee — '+name+' ('+co.companyName+')');}else{co.employees.push({id:'EMP-'+Date.now(),employeeName:name,contact:contact,location:(document.getElementById('salem_loc').value||'').trim(),amountGiven:amt,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,monthlyPayment:c.monthly,totalDue:c.totalDue,totalInterest:c.intTotal,commission:c.commission,payments:pmts,status:'active',notes:(document.getElementById('salem_notes').value||'').trim(),createdBy:cu.display,createdAt:now_()});logAct('Salary advance — '+name+' ('+co.companyName+') — '+zmw(amt));}save();closeSalEmpModal();toast('Employee saved!');salViewCo(coId);}
+function salEmpView(coId,empId){var co=findSalCo(coId);if(!co)return;var emp=(co.employees||[]).filter(function(e){return e.id===empId;})[0];if(!emp)return;var st=empStatus(emp),paid=empTotalPaid(emp),bal=empBalance(emp),mc=document.getElementById('mainct');var h='<button class="bk" onclick="salViewCo(\''+coId+'\')">← Back to '+esc(co.companyName)+'</button><div style="background:linear-gradient(135deg,#1f0a05,#5c3d1a);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;"><div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">SALARY ADVANCE · '+esc(co.companyName)+'</div><div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(emp.employeeName)+'</div><div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(emp.contact)+'</div></div>';h+='<div class="sg"><div class="sc"><div class="sl">Amount Given</div><div class="sv" style="font-size:16px;">'+zmw(emp.amountGiven)+'</div></div><div class="sc"><div class="sl">Disbursed</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(emp.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(emp.serviceCharge)+'</div></div><div class="sc"><div class="sl">Monthly</div><div class="sv" style="font-size:16px;">'+zmw(emp.monthlyPayment)+'</div></div><div class="sc"><div class="sl">Paid</div><div class="sv" style="color:var(--ok2);font-size:16px;">'+zmw(paid)+'</div><div class="ss">of '+zmw(emp.totalDue)+'</div></div><div class="sc" style="border-top-color:'+(bal>0?'var(--red2)':'var(--ok2)')+'"><div class="sl">Balance</div><div class="sv" style="color:'+(bal>0?'var(--red2)':'var(--ok2)')+';font-size:16px;">'+zmw(bal)+'</div></div><div class="sc"><div class="sl">Commission (3%)</div><div class="sv" style="color:var(--ok2);font-size:14px;">'+zmw(emp.commission||0)+'</div></div></div>';var today=td_();h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Payment Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Monthly Due</th><th>Paid</th><th>Date Paid</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';(emp.payments||[]).forEach(function(p,i){var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending';h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-size:12px;">'+(p.datePaid?fmtD(p.datePaid):'—')+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>'+(canManage()?'<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="salRecordPay(\''+coId+'\',\''+empId+'\','+i+')">Record</button>':'<button class="ab" onclick="salUndoPay(\''+coId+'\',\''+empId+'\','+i+')">Undo</button>')+'</td>':'')+'</tr>';});h+='</tbody></table></div></div>';mc.innerHTML=h;}
+function salRecordPay(coId,empId,i){var co=findSalCo(coId);if(!co)return;var emp=(co.employees||[]).filter(function(e){return e.id===empId;})[0];if(!emp)return;var p=emp.payments[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' balance: '+zmw(def)+'\nEnter amount:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();if(empTotalPaid(emp)>=(emp.totalDue-1))emp.status='cleared';logAct('Salary pay — '+emp.employeeName+' M'+p.month+' — '+zmw(amt));save();toast('Payment recorded!');salEmpView(coId,empId);}
+function salUndoPay(coId,empId,i){var co=findSalCo(coId);if(!co)return;var emp=(co.employees||[]).filter(function(e){return e.id===empId;})[0];if(!emp)return;var p=emp.payments[i];if(!confirm('Undo?'))return;p.amountPaid=0;p.datePaid=null;if(emp.status==='cleared')emp.status='active';save();toast('Undone.');salEmpView(coId,empId);}
+// ===== REPORTS =====
+function renderReports(mc){
+  var today=td_();
+  function gs(arr,stFn,balFn,paidFn){var s={n:0,active:0,ov:0,cl:0,out:0,paid:0,bal:0};arr.forEach(function(l){var st=stFn(l);s.n++;if(st==='active')s.active++;else if(st==='overdue'||st.indexOf('overdue')>=0)s.ov++;else if(st==='cleared')s.cl++;s.out+=(l.disbursedAmount||l.amountGiven||0);s.paid+=paidFn(l);s.bal+=balFn(l);});return s;}
+  var allEmps=[];salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){allEmps.push(e);});});
+  var ilS=gs(instantLoans,ilStatus,function(l){return Math.max(0,ilTotalDue(l)-(l.settledAmount||0));},function(l){return l.settledAmount||0;});
+  var ltS=gs(longTermLoans,ltStatus,ltBalance,ltTotalPaid);
+  var invS=gs(invoiceLoans,invStatus,invBalance,function(l){var t=0;(l.months||[]).forEach(function(m){t+=(m.amountPaid||0);});return t;});
+  var ordS=gs(orderLoans,function(l){return invStatus({status:l.status,months:l.months});},function(l){var t=0;(l.months||[]).forEach(function(m){t+=Math.max(0,m.amountDue-(m.amountPaid||0));});return t;},function(l){var t=0;(l.months||[]).forEach(function(m){t+=(m.amountPaid||0);});return t;});
+  var salS=gs(allEmps,empStatus,empBalance,empTotalPaid);
+  var grand={n:0,active:0,ov:0,cl:0,out:0,paid:0,bal:0};
+  [ilS,ltS,invS,ordS,salS].forEach(function(s){grand.n+=s.n;grand.active+=s.active;grand.ov+=s.ov;grand.cl+=s.cl;grand.out+=s.out;grand.paid+=s.paid;grand.bal+=s.bal;});
+  var h='<div class="pgh" style="background:linear-gradient(135deg,#0d0d0d,#1a1208);border:1px solid rgba(201,168,76,.2);">';
+  h+='<div><div class="pgt">📊 Portfolio Summary</div><div class="pgs">All products · As at '+fmtD(today)+'</div></div>';
+  h+='<button class="btn btg" onclick="exportReport()">⬇ Export CSV</button></div>';
+  h+='<div class="sg"><div class="sc"><div class="si">📋</div><div class="sl">Total Loans</div><div class="sv">'+grand.n+'</div></div><div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Active</div><div class="sv" style="color:var(--ok2)">'+grand.active+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+grand.ov+'</div></div><div class="sc" style="border-top-color:var(--gold)"><div class="si">💰</div><div class="sl">Total Disbursed</div><div class="sv" style="font-size:13px;color:var(--gold);">'+zmw(grand.out)+'</div></div><div class="sc"><div class="si">💵</div><div class="sl">Total Collected</div><div class="sv" style="font-size:13px;color:var(--ok2);">'+zmw(grand.paid)+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">📊</div><div class="sl">Balance Due</div><div class="sv" style="font-size:13px;color:var(--red2);">'+zmw(grand.bal)+'</div></div></div>';
+  h+='<div class="cd" style="margin-bottom:16px;"><div class="cdh"><span class="cdt">Product Breakdown</span></div><div class="tw"><table><thead><tr><th>Product</th><th>Loans</th><th>Active</th><th>Overdue</th><th>Cleared</th><th>Disbursed</th><th>Collected</th><th>Balance</th></tr></thead><tbody>';
+  var prods=[{n:'⚡ Instant Loans',s:ilS,c:'var(--blue2)'},{n:'💼 Long Term',s:ltS,c:'var(--ok2)'},{n:'📄 Invoice Disc.',s:invS,c:'#9b59b6'},{n:'📦 Order Finance',s:ordS,c:'#8e44ad'},{n:'👤 Salary Advance',s:salS,c:'var(--warn)'}];
+  prods.forEach(function(p){h+='<tr><td style="font-weight:700;color:'+p.c+';">'+p.n+'</td><td style="text-align:center;font-weight:700;">'+p.s.n+'</td><td style="text-align:center;"><span class="bg bgg">'+p.s.active+'</span></td><td style="text-align:center;"><span class="bg bgr">'+p.s.ov+'</span></td><td style="text-align:center;"><span class="bg bgb">'+p.s.cl+'</span></td><td style="font-family:monospace;">'+zmw(p.s.out)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.s.paid)+'</td><td style="font-family:monospace;color:var(--red2);font-weight:700;">'+zmw(p.s.bal)+'</td></tr>';});
+  h+='<tr style="background:rgba(201,168,76,.05);font-weight:700;border-top:1px solid var(--border);"><td style="color:var(--gold);">TOTAL</td><td style="text-align:center;">'+grand.n+'</td><td style="text-align:center;color:var(--ok2);">'+grand.active+'</td><td style="text-align:center;color:var(--red2);">'+grand.ov+'</td><td style="text-align:center;">'+grand.cl+'</td><td style="font-family:monospace;">'+zmw(grand.out)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(grand.paid)+'</td><td style="font-family:monospace;color:var(--red2);">'+zmw(grand.bal)+'</td></tr>';
+  h+='</tbody></table></div></div>';
+  // Overdue
+  var ovList=[];
+  instantLoans.forEach(function(l){var s=ilStatus(l);if(s.indexOf('overdue')>=0)ovList.push({prod:'⚡ Instant',name:l.clientName,contact:l.clientPhone||'',bal:Math.max(0,ilTotalDue(l)-(l.settledAmount||0)),s:s});});
+  longTermLoans.forEach(function(l){if(ltStatus(l)==='overdue')ovList.push({prod:'💼 LT',name:l.clientName,contact:l.contact||'',bal:ltBalance(l),s:'overdue'});});
+  invoiceLoans.forEach(function(l){if(invStatus(l)==='overdue')ovList.push({prod:'📄 Invoice',name:l.companyName,contact:l.contact||'',bal:invBalance(l),s:'overdue'});});
+  orderLoans.forEach(function(l){if(invStatus({status:l.status,months:l.months})==='overdue'){var b=0;(l.months||[]).forEach(function(m){b+=Math.max(0,m.amountDue-(m.amountPaid||0));});ovList.push({prod:'📦 Order',name:l.companyName,contact:l.contact||'',bal:b,s:'overdue'});}});
+  allEmps.forEach(function(e){if(empStatus(e)==='overdue')ovList.push({prod:'👤 Salary',name:e.employeeName,contact:e.contact||'',bal:empBalance(e),s:'overdue'});});
+  if(ovList.length){h+='<div class="cd" style="border-top:3px solid var(--red2);"><div class="cdh"><span class="cdt" style="color:var(--red2);">⚠️ Overdue Accounts ('+ovList.length+')</span></div><div class="tw"><table><thead><tr><th>Product</th><th>Client/Company</th><th>Contact</th><th>Balance Due</th><th>Status</th></tr></thead><tbody>';ovList.forEach(function(o){var slbl=o.s==='overdue_penalty'?'Penalty Applied':o.s==='overdue_cancel'?'Cancel Risk':'Overdue';h+='<tr><td style="font-size:12px;font-weight:600;">'+o.prod+'</td><td><strong>'+esc(o.name)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(o.contact)+'</td><td style="font-family:monospace;font-weight:700;color:var(--red2);">'+zmw(o.bal)+'</td><td><span class="bg bgr" style="font-size:9px;">'+slbl+'</span></td></tr>';});h+='</tbody></table></div></div>';}
+  mc.innerHTML=h;
+}
+function exportReport(){
+  var today=td_();
+  var allEmps=[];salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){allEmps.push(e);});});
+  var rows=[['SALTY ENTERPRISES — CORPORATE PORTFOLIO SUMMARY','','','','','','',''],['Generated:',today,'','','','','',''],['','','','','','','',''],['Product','Total','Active','Overdue','Cleared','Disbursed','Collected','Balance']];
+  function addRow(nm,arr,stFn,balFn,paidFn){var s={n:0,active:0,ov:0,cl:0,out:0,paid:0,bal:0};arr.forEach(function(l){var st=stFn(l);s.n++;if(st==='active')s.active++;else if(st==='overdue'||st.indexOf('overdue')>=0)s.ov++;else if(st==='cleared')s.cl++;s.out+=(l.disbursedAmount||l.amountGiven||0);s.paid+=paidFn(l);s.bal+=balFn(l);});rows.push([nm,s.n,s.active,s.ov,s.cl,s.out,s.paid,s.bal]);}
+  addRow('Instant Loans',instantLoans,ilStatus,function(l){return Math.max(0,ilTotalDue(l)-(l.settledAmount||0));},function(l){return l.settledAmount||0;});
+  addRow('Long Term Loans',longTermLoans,ltStatus,ltBalance,ltTotalPaid);
+  addRow('Invoice Discounting',invoiceLoans,invStatus,invBalance,function(l){var t=0;(l.months||[]).forEach(function(m){t+=(m.amountPaid||0);});return t;});
+  addRow('Order Financing',orderLoans,function(l){return invStatus({status:l.status,months:l.months});},function(l){var t=0;(l.months||[]).forEach(function(m){t+=Math.max(0,m.amountDue-(m.amountPaid||0));});return t;},function(l){var t=0;(l.months||[]).forEach(function(m){t+=(m.amountPaid||0);});return t;});
+  addRow('Salary Advance',allEmps,empStatus,empBalance,empTotalPaid);
+  var csv=rows.map(function(r){return r.map(function(v){var s=String(v===null||v===undefined?'':v);if(s.indexOf(',')>=0||s.indexOf('"')>=0)s='"'+s.replace(/"/g,'""')+'"';return s;}).join(',');}).join('\r\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='salty_corporate_'+today+'.csv';a.click();URL.revokeObjectURL(a.href);toast('Report exported!');
+}
+// ===== ACTIVITY =====
+function renderActivity(mc){
+  var h='<div class="pgh" style="background:linear-gradient(135deg,#0d0d0d,#1a1a1a);border:1px solid var(--border);"><div><div class="pgt">Activity Log</div><div class="pgs">Recent actions</div></div></div>';
+  h+='<div class="cd"><div class="cdb">';
+  if(!actLog.length)h+='<div class="es"><div class="ei">📋</div><div class="et">No activity yet</div></div>';
+  else actLog.forEach(function(l){h+='<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04);"><div style="width:6px;height:6px;border-radius:50%;background:var(--gold);margin-top:5px;flex-shrink:0;"></div><div><div style="font-size:13px;font-weight:500;">'+esc(l.msg)+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+esc(l.user)+' · '+fmtDT(l.time)+'</div></div></div>';});
+  h+='</div></div>';
+  mc.innerHTML=h;
+}
+</script>
+</body>
+</html>
