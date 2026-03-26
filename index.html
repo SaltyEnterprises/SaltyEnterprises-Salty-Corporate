@@ -927,15 +927,16 @@ function renderMyApplications(mc){
   h+='<button class="btn btg" onclick="openAppModal()">+ Submit Application</button></div>';
   if(!mine.length){h+='<div class="cd"><div class="es"><div class="ei">📋</div><div class="et">No applications yet</div><div style="font-size:12px;color:var(--muted);margin-top:6px;">Submit a loan application for admin approval</div></div></div>';}
   else{
-    h+='<div class="cd"><div class="tw"><table><thead><tr><th>Client/Company</th><th>Product</th><th>Amount</th><th>Submitted</th><th>Status</th><th>Note</th></tr></thead><tbody>';
+    h+='<div class="cd"><div class="tw"><table><thead><tr><th>Client/Company</th><th>Product</th><th>Amount</th><th>Submitted</th><th>Status</th><th>Note</th><th></th></tr></thead><tbody>';
     mine.forEach(function(a){
       var scls=a.status==='pending'?'bgo':a.status==='approved'?'bgg':a.status==='rejected'?'bgr':'bgx';
       var slbl=a.status==='pending'?'Awaiting Approval':a.status==='approved'?'Approved ✓':a.status==='rejected'?'Rejected':'Draft';
       h+='<tr><td><strong>'+esc(a.clientName)+'</strong></td><td style="font-size:12px;">'+esc(a.product)+'</td>';
-      h+='<td style="font-family:monospace;font-weight:700;">'+zmw(a.amount)+'</td>';
+      h+='<td style="font-family:monospace;font-weight:700;">'+zmw(a.amount||a.amountGiven||0)+'</td>';
       h+='<td style="font-size:12px;">'+fmtDT(a.createdAt)+'</td>';
       h+='<td><span class="bg '+scls+'">'+slbl+'</span></td>';
       h+='<td style="font-size:11px;color:'+(a.status==='rejected'?'var(--red2)':'var(--muted)')+';">'+esc(a.adminNote||'—')+'</td>';
+      h+='<td><button class="ab" style="color:var(--red2);border-color:var(--red2);" onclick="deleteApp(\''+a.id+'\')">🗑 Delete</button></td>';
       h+='</tr>';
     });
     h+='</tbody></table></div></div>';
@@ -986,6 +987,7 @@ function renderApprovals(mc){
       h+='<div style="display:flex;gap:8px;margin-top:10px;">';
       h+='<button class="btn btok" style="flex:1;padding:10px;" onclick="decideApp(\''+a.id+'\',\'approved\')">✓ Approve</button>';
       h+='<button class="btn btd" style="flex:1;padding:10px;" onclick="decideApp(\''+a.id+'\',\'rejected\')">✗ Reject</button>';
+      h+='<button class="btn" style="padding:10px;background:rgba(100,100,100,.15);border:1px solid var(--border);color:var(--muted);" onclick="deleteApp(\''+a.id+'\')">🗑</button>';
       h+='</div></div>';
       h+='</div>';
     });
@@ -993,20 +995,32 @@ function renderApprovals(mc){
 
   if(others.length){
     h+='<div class="cd"><div class="cdh"><span class="cdt">Processed Applications ('+others.length+')</span></div>';
-    h+='<div class="tw"><table><thead><tr><th>Client/Company</th><th>Product</th><th>Requested</th><th>Approved</th><th>By</th><th>Date</th><th>Status</th><th>Note</th></tr></thead><tbody>';
+    h+='<div class="tw"><table><thead><tr><th>Client/Company</th><th>Product</th><th>Requested</th><th>Approved</th><th>By</th><th>Date</th><th>Status</th><th>Note</th><th></th></tr></thead><tbody>';
     others.forEach(function(a){
       var scls=a.status==='approved'?'bgg':'bgr';
       h+='<tr><td><strong>'+esc(a.clientName)+'</strong></td><td style="font-size:12px;">'+esc(a.product)+'</td>';
-      h+='<td style="font-family:monospace;">'+zmw(a.amountGiven)+'</td>';
+      h+='<td style="font-family:monospace;">'+zmw(a.amountGiven||a.amount||0)+'</td>';
       h+='<td style="font-family:monospace;font-weight:700;color:'+(a.approvedAmount&&a.approvedAmount!==a.amountGiven?'var(--warn)':'var(--text)')+';">'+zmw(a.approvedAmount||a.amountGiven)+'</td>';
       h+='<td style="font-size:12px;">'+esc(a.submittedByName)+'</td>';
       h+='<td style="font-size:12px;">'+fmtD(a.decidedAt?a.decidedAt.substring(0,10):'')+'</td>';
       h+='<td><span class="bg '+scls+'">'+(a.status==='approved'?'Approved ✓':'Rejected')+'</span></td>';
-      h+='<td style="font-size:11px;color:var(--muted);">'+esc(a.adminNote||'—')+'</td></tr>';
+      h+='<td style="font-size:11px;color:var(--muted);">'+esc(a.adminNote||'—')+'</td>';
+      h+='<td><button class="ab" style="color:var(--red2);border-color:var(--red2);" onclick="deleteApp(\''+a.id+'\')">🗑</button></td></tr>';
     });
     h+='</tbody></table></div></div>';
   }
   mc.innerHTML=h;
+}
+
+function deleteApp(id){
+  var a=corpApplications.filter(function(x){return x.id===id;})[0];if(!a)return;
+  if(!confirm('Delete application for '+a.clientName+'?\nThis cannot be undone.'))return;
+  corpApplications=corpApplications.filter(function(x){return x.id!==id;});
+  logAct('Deleted application — '+a.clientName+' — '+a.product);
+  save();toast('Application deleted.');
+  if(canDo('admin'))renderApprovals(document.getElementById('mainct'));
+  else renderMyApplications(document.getElementById('mainct'));
+  buildNav();
 }
 
 function decideApp(id,decision){
@@ -1014,7 +1028,7 @@ function decideApp(id,decision){
   var noteEl=document.getElementById('note_'+id);
   var note=noteEl?(noteEl.value||'').trim():'';
   var amtEl=document.getElementById('amt_'+id);
-  var approvedAmt=amtEl?parseFloat(amtEl.value)||a.amountGiven:a.amountGiven;
+  var origAmt=a.amountGiven||a.amount||0;var approvedAmt=amtEl?parseFloat(amtEl.value)||origAmt:origAmt;
   if(decision==='rejected'&&!note){toast('Please add a reason for rejection.');return;}
 
   a.status=decision;a.adminNote=note;a.decidedBy=cu.display;a.decidedAt=now_();a.approvedAmount=approvedAmt;
@@ -1022,6 +1036,7 @@ function decideApp(id,decision){
   if(decision==='approved'){
     // Create the actual loan record now
     var today=td_();
+    if(!a.type&&a.product)a.type=a.product.indexOf('Instant')>=0?'instant':a.product.indexOf('Long')>=0?'longterm':a.product.indexOf('Invoice')>=0?'invoice':a.product.indexOf('Order')>=0?'order':a.product.indexOf('Salary')>=0?'salary':null;
     if(a.type==='instant'){
       var due=ilDueDate(a.dateGiven||today,a.termWeeks||1);
       var nl={id:'IL-'+Date.now(),clientName:a.clientName,clientPhone:a.clientPhone||a.contact||'',nrc:a.nrc||'',branch:a.branch||'',location:a.location||'',occupation:a.occupation||'',collateral:a.collateral||'',amountGiven:approvedAmt,termWeeks:a.termWeeks||1,dateGiven:a.dateGiven||today,dueDate:due,status:'active',notes:a.notes||'',createdBy:a.submittedByName,approvedBy:cu.display,createdAt:now_(),weeksUsed:null,settledDate:null,settledAmount:null,photos:a.photos||[]};
@@ -1049,7 +1064,7 @@ function decideApp(id,decision){
       var pmts4=[];for(var m=1;m<=a.termMonths;m++)pmts4.push({month:m,dueDate:ltMonthDate(a.dateGiven||today,m),amountDue:calc4.monthly,amountPaid:0,datePaid:null});
       co.employees.push({id:'EMP-'+Date.now(),employeeName:empName,contact:a.contact||'',location:a.location||'',amountGiven:approvedAmt,termMonths:a.termMonths||1,dateGiven:a.dateGiven||today,serviceCharge:calc4.svc,disbursedAmount:calc4.disb,monthlyPayment:calc4.monthly,totalDue:calc4.totalDue,totalInterest:calc4.intTotal,commission:calc4.commission,payments:pmts4,status:'active',notes:a.notes||'',createdBy:a.submittedByName,approvedBy:cu.display,createdAt:now_()});
     }
-    var adjNote=approvedAmt!==a.amountGiven?' (adjusted from '+zmw(a.amountGiven)+')':'';
+    var adjNote=approvedAmt!==origAmt?' (adjusted from '+zmw(origAmt)+')':'';
     logAct('APPROVED application — '+a.clientName+' — '+a.product+' — '+zmw(approvedAmt)+adjNote+(note?' — '+note:''));
     toast('✓ Approved! Loan created — '+zmw(approvedAmt));
   } else {
