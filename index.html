@@ -184,8 +184,10 @@ var instantLoans=[],longTermLoans=[],invoiceLoans=[],orderLoans=[],salaryLoans=[
 var cu=null;
 var CLOUDINARY_CLOUD='dsva9c8h0',CLOUDINARY_PRESET='Salty_Photos';
 function pad(n){return n<10?'0'+n:String(n);}
-function td_(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
-function now_(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());}
+function zambiaHour(){var d=new Date();return (d.getUTCHours()+2)%24;}
+function zambiaDate(){var d=new Date();var zd=new Date(d.getTime()+2*3600000);return zd.getUTCFullYear()+'-'+pad(zd.getUTCMonth()+1)+'-'+pad(zd.getUTCDate());}
+function td_(){return zambiaDate();}
+function now_(){var d=new Date();var zd=new Date(d.getTime()+2*3600000);return zd.getUTCFullYear()+'-'+pad(zd.getUTCMonth()+1)+'-'+pad(zd.getUTCDate())+'T'+pad(zd.getUTCHours())+':'+pad(zd.getUTCMinutes());}
 function fmtD(s){if(!s)return '—';var p=s.substring(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s;}
 function fmtDT(s){if(!s)return '—';return fmtD(s)+(s.length>10?' '+s.substring(11,16):'');}
 function zmw(n){if(n===null||n===undefined)return '—';return 'ZMW '+Number(n).toLocaleString('en-ZM',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -237,7 +239,7 @@ function renderDashboard(mc){
   orderLoans.forEach(function(l){if(invStatus({status:l.status,months:l.months})!=='cleared')totalOut+=(l.disbursedAmount||0);});
   salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){if(empStatus(e)!=='cleared'&&empStatus(e)!=='cancelled')totalOut+=(e.disbursedAmount||0);});});
   var h='<div style="background:linear-gradient(135deg,#0d0d0d,#1a1208);border:1px solid rgba(201,168,76,.2);border-radius:14px;padding:20px 24px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">';
-  h+='<div><div style="font-family:\'Playfair Display\',serif;font-size:24px;font-weight:800;">Good '+(new Date().getHours()<12?'morning':'afternoon')+', '+esc(cu.display)+'</div><div style="font-size:13px;color:var(--muted);margin-top:4px;">Corporate Finance Portfolio — '+fmtD(td_())+'</div></div><div style="font-size:32px;">💼</div></div>';
+  h+='<div><div style="font-family:\'Playfair Display\',serif;font-size:24px;font-weight:800;">Good '+(zambiaHour()<12?'morning':zambiaHour()<17?'afternoon':'evening')+', '+esc(cu.display)+'</div><div style="font-size:13px;color:var(--muted);margin-top:4px;">Corporate Finance Portfolio — '+fmtD(td_())+'</div></div><div style="font-size:32px;">💼</div></div>';
   h+='<div class="sg">';
   h+='<div class="sc"><div class="si">💼</div><div class="sl">Total Loans</div><div class="sv">'+totalLoans+'</div></div>';
   h+='<div class="sc"><div class="si">👤</div><div class="sl">Salary Employees</div><div class="sv">'+totalEmps+'</div></div>';
@@ -936,7 +938,7 @@ function renderMyApplications(mc){
       h+='<td style="font-size:12px;">'+fmtDT(a.createdAt)+'</td>';
       h+='<td><span class="bg '+scls+'">'+slbl+'</span></td>';
       h+='<td style="font-size:11px;color:'+(a.status==='rejected'?'var(--red2)':'var(--muted)')+';">'+esc(a.adminNote||'—')+'</td>';
-      h+='<td><button class="ab" style="color:var(--red2);border-color:var(--red2);" onclick="deleteApp(\''+a.id+'\')">🗑 Delete</button></td>';
+      h+='<td style="white-space:nowrap;"><button class="ab" onclick="viewFullApp(\''+a.id+'\')">👁 View</button> <button class="ab" style="color:var(--red2);border-color:var(--red2);" onclick="deleteApp(\''+a.id+'\')">🗑</button></td>';
       h+='</tr>';
     });
     h+='</tbody></table></div></div>';
@@ -963,7 +965,7 @@ function renderApprovals(mc){
       h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px;">';
       h+='<div><div style="font-size:17px;font-weight:800;">'+esc(a.clientName)+'</div>';
       h+='<div style="font-size:12px;color:var(--muted);margin-top:3px;">'+esc(a.product)+' · Submitted by <strong>'+esc(a.submittedByName)+'</strong> · '+fmtDT(a.createdAt)+'</div></div>';
-      h+='<span class="bg bgo" style="font-size:11px;">Pending Review</span></div>';
+      h+='<div style="display:flex;gap:8px;align-items:center;"><span class="bg bgo" style="font-size:11px;">Pending Review</span><button class="ab" onclick="viewFullApp(\''+a.id+'\')">👁 View Full</button></div></div>';
       // All details in a grid
       h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;font-size:12px;background:rgba(255,255,255,.03);border-radius:8px;padding:12px;margin-bottom:12px;">';
       if(a.branch)h+='<div><span style="color:var(--muted);display:block;font-size:10px;text-transform:uppercase;margin-bottom:2px;">Branch</span><strong>'+esc(a.branch)+'</strong></div>';
@@ -1010,6 +1012,48 @@ function renderApprovals(mc){
     h+='</tbody></table></div></div>';
   }
   mc.innerHTML=h;
+}
+
+
+function viewFullApp(id){
+  var a=corpApplications.filter(function(x){return x.id===id;})[0];if(!a)return;
+  var e=document.getElementById('viewappmod');if(e)e.remove();
+  var scls=a.status==='pending'?'bgo':a.status==='approved'?'bgg':'bgr';
+  var slbl=a.status==='pending'?'Pending Approval':a.status==='approved'?'Approved ✓':'Rejected';
+  var h='<div class="mo op" id="viewappmod"><div class="md mlg" style="margin-top:10px;">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);">';
+  h+='<div><div style="font-family:\'Playfair Display\',serif;font-size:22px;font-weight:700;">'+esc(a.clientName)+'</div>';
+  h+='<div style="font-size:12px;color:var(--muted);margin-top:4px;">'+esc(a.product)+'</div></div>';
+  h+='<span class="bg '+scls+'">'+slbl+'</span></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px;">';
+  h+='<div class="fsec" style="margin:0;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Amount Requested</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(a.amountGiven||a.amount||0)+'</div></div>';
+  if(a.approvedAmount)h+='<div class="fsec" style="margin:0;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Approved Amount</div><div style="font-size:18px;font-weight:700;color:var(--ok2);">'+zmw(a.approvedAmount)+'</div></div>';
+  if(a.branch)h+='<div class="fsec" style="margin:0;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Branch</div><div style="font-size:15px;font-weight:700;">'+esc(a.branch)+'</div></div>';
+  if(a.termWeeks)h+='<div class="fsec" style="margin:0;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Term</div><div style="font-size:15px;font-weight:700;">'+a.termWeeks+' Week(s)</div></div>';
+  if(a.termMonths)h+='<div class="fsec" style="margin:0;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Term</div><div style="font-size:15px;font-weight:700;">'+a.termMonths+' Month(s)</div></div>';
+  if(a.dateGiven)h+='<div class="fsec" style="margin:0;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Date Given</div><div style="font-size:15px;font-weight:700;">'+fmtD(a.dateGiven)+'</div></div>';
+  h+='</div>';
+  h+='<div class="fsec"><div class="fst">Client Information</div>';
+  h+='<div class="rm"><span class="rml">Full Name</span><span class="rmv">'+esc(a.clientName)+'</span></div>';
+  if(a.clientPhone||a.contact)h+='<div class="rm"><span class="rml">Phone</span><span class="rmv">'+esc(a.clientPhone||a.contact||'—')+'</span></div>';
+  if(a.nrc)h+='<div class="rm"><span class="rml">NRC</span><span class="rmv">'+esc(a.nrc)+'</span></div>';
+  if(a.location)h+='<div class="rm"><span class="rml">Location</span><span class="rmv">'+esc(a.location)+'</span></div>';
+  if(a.occupation)h+='<div class="rm"><span class="rml">Occupation</span><span class="rmv">'+esc(a.occupation)+'</span></div>';
+  if(a.directorName)h+='<div class="rm"><span class="rml">Director</span><span class="rmv">'+esc(a.directorName)+'</span></div>';
+  h+='</div>';
+  if(a.collateral){h+='<div class="fsec"><div class="fst">Collateral</div><div style="font-size:14px;font-weight:600;color:var(--warn);">'+esc(a.collateral)+'</div></div>';}
+  if(a.photos&&a.photos.length){h+='<div class="fsec"><div class="fst">Collateral Photos ('+a.photos.length+')</div><div style="display:flex;flex-wrap:wrap;gap:10px;">';a.photos.forEach(function(u){h+='<img src="'+u+'" style="height:110px;border-radius:8px;border:1px solid var(--border);cursor:pointer;object-fit:cover;" onclick="window.open(this.src,\'_blank\')">';});h+='</div></div>';}
+  if(a.notes){h+='<div class="fsec"><div class="fst">Notes from Submitter</div><div style="font-size:13px;line-height:1.6;">'+esc(a.notes)+'</div></div>';}
+  h+='<div class="fsec"><div class="fst">Submission Details</div>';
+  h+='<div class="rm"><span class="rml">Submitted By</span><span class="rmv">'+esc(a.submittedByName)+'</span></div>';
+  h+='<div class="rm"><span class="rml">Submitted At</span><span class="rmv">'+fmtDT(a.createdAt)+'</span></div>';
+  if(a.decidedBy)h+='<div class="rm"><span class="rml">Decision By</span><span class="rmv">'+esc(a.decidedBy)+'</span></div>';
+  if(a.adminNote){var noteColor=a.status==='rejected'?'var(--red2)':'var(--ok2)';h+='<div class="rm"><span class="rml">Admin Note</span><span class="rmv" style="color:'+noteColor+';">'+esc(a.adminNote)+'</span></div>';}
+  h+='</div>';
+  h+='<div class="mft"><button class="btn bto" onclick="document.getElementById(\'viewappmod\').remove()">Close</button>';
+  if(canDo('admin')&&a.status==='pending'){h+='<button class="btn btok" style="flex:1;" onclick="document.getElementById(\'viewappmod\').remove();renderApprovals(document.getElementById(\'mainct\'))"> ✓ Approve from Queue</button>';}
+  h+='</div></div></div>';
+  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);
 }
 
 function deleteApp(id){
