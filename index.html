@@ -577,13 +577,14 @@ function ltCalc(amt,months){var t=ltGetTier(amt);if(!t)return null;var svcAmt=Ma
 function ltStatus(l){if(l.status==='cleared')return 'cleared';if(l.status==='cancelled')return 'cancelled';var today=td_(),tp=0;for(var i=0;i<(l.payments||[]).length;i++)tp+=(l.payments[i].amountPaid||0);if(tp>=(l.totalDue-1))return 'cleared';for(var i=0;i<(l.payments||[]).length;i++){var p=l.payments[i];if(!p.amountPaid&&p.dueDate&&today>p.dueDate)return 'overdue';}return 'active';}
 function ltTotalPaid(l){var t=0;for(var i=0;i<(l.payments||[]).length;i++)t+=(l.payments[i].amountPaid||0);return t;}
 function ltBalance(l){return Math.max(0,Math.round(((l.totalDue||0)-ltTotalPaid(l))*100)/100);}
+function deleteLT(id){if(!confirm('Permanently delete this loan?'))return;longTermLoans=longTermLoans.filter(function(x){return x.id!==id;});if(_fbReady&&_db)_db.collection('salty-corporate').doc('lt').collection('lt').doc(id).delete().catch(function(e){console.warn(e);});logAct('Deleted LT loan '+id);save();toast('Loan deleted.');renderLongTermLoans(document.getElementById('mainct'));}
 function renderLongTermLoans(mc){
   var fs=window._ltFilter||'all';
   var stats={active:0,overdue:0,cleared:0,out:0,bal:0};
   longTermLoans.forEach(function(l){var st=ltStatus(l);if(st==='active')stats.active++;else if(st==='overdue')stats.overdue++;else if(st==='cleared')stats.cleared++;if(st!=='cleared'&&st!=='cancelled'){stats.out+=(l.disbursedAmount||0);stats.bal+=ltBalance(l);}});
   var h='<div class="pgh" style="background:linear-gradient(135deg,#0a1f10,#1a3a24);">';
   h+='<div><div class="pgt">💼 Long Term Loans</div><div class="pgs">Monthly repayments · 1–12 months · Tiered rates · Service charge deducted upfront</div></div>';
-  if(canManage())h+='<button class="btn btg" onclick="openLTModal()">+ New Long Term Loan</button>';
+  if(canManage())h+='<button class="btn btg" onclick="openLTModal()">+ New Application</button>';
   h+='</div>';
   h+='<div class="sg"><div class="sc"><div class="si">💼</div><div class="sl">Active</div><div class="sv">'+stats.active+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+stats.overdue+'</div></div><div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Cleared</div><div class="sv" style="color:var(--ok2)">'+stats.cleared+'</div></div><div class="sc"><div class="si">💰</div><div class="sl">Disbursed</div><div class="sv" style="font-size:14px;">'+zmw(stats.out)+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">📊</div><div class="sl">Balance Due</div><div class="sv" style="font-size:14px;color:var(--red2);">'+zmw(stats.bal)+'</div></div></div>';
   h+='<div class="cd" style="margin-bottom:14px;"><div class="cdh"><span class="cdt">Interest Rate Tiers</span></div><div style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;">';
@@ -595,83 +596,567 @@ function renderLongTermLoans(mc){
   h+='</div>';
   var list=longTermLoans.filter(function(l){var s=ltStatus(l);return fs==='all'||s===fs;}).sort(function(a,b){return b.dateGiven>a.dateGiven?1:-1;});
   if(!list.length){h+='<div class="cd"><div class="es"><div class="ei">💼</div><div class="et">No long term loans</div></div></div>';}
-  else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Client</th><th>Contact</th><th>Amount</th><th>Rate</th><th>Disbursed</th><th>Monthly</th><th>Paid</th><th>Balance</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';
-  list.forEach(function(l){var st=ltStatus(l),bal=ltBalance(l),paid=ltTotalPaid(l);var sc=st==='active'?'bgg':st==='overdue'?'bgr':st==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.clientName)+'</strong></td><td style="font-size:11px;color:var(--muted);">'+esc(l.contact||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'<div style="font-size:9px;color:var(--muted);">'+(l.interestRate?(l.interestRate*100)+'%/mo':'')+'</div></td><td>'+((l.interestRate||0)*100)+'%</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td style="font-family:monospace;">'+zmw(l.monthlyPayment)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(paid)+'</td><td style="font-family:monospace;font-weight:700;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue':st==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="ltView(\''+l.id+'\')">👁 View</button>'+(canManage()&&st!=='cleared'&&st!=='cancelled'?'<button class="ab" onclick="openLTModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+(canDo('admin')?'<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;" onclick="deleteLT(\''+l.id+'\')">🗑</button>':'')+'</td></tr>';});
-  h+='</tbody></table></div></div>';}
+  else{
+    h+='<div class="cd"><div class="tw"><table><thead><tr><th>Client</th><th>Type</th><th>Contact</th><th>Amount</th><th>Disbursed</th><th>Monthly</th><th>Balance</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';
+    list.forEach(function(l){
+      var st=ltStatus(l),bal=ltBalance(l),paid=ltTotalPaid(l);
+      var sc=st==='active'?'bgg':st==='overdue'?'bgr':st==='cleared'?'bgb':'bgx';
+      h+='<tr>';
+      h+='<td><strong>'+esc(l.clientName)+'</strong>'+(l.nrc?'<div style="font-size:10px;color:var(--muted);">NRC: '+esc(l.nrc)+'</div>':'')+'</td>';
+      h+='<td style="font-size:11px;color:var(--muted);">'+(l.clientType==='company'?'🏢 Company':'👤 Individual')+'</td>';
+      h+='<td style="font-size:11px;color:var(--muted);">'+esc(l.contact||'')+'</td>';
+      h+='<td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td>';
+      h+='<td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td>';
+      h+='<td style="font-family:monospace;">'+zmw(l.monthlyPayment)+'</td>';
+      h+='<td style="font-family:monospace;font-weight:700;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td>';
+      h+='<td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td>';
+      h+='<td><span class="bg '+sc+'">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue':st==='active'?'Active':'Cancelled')+'</span></td>';
+      h+='<td style="white-space:nowrap;"><button class="ab" onclick="ltView(\''+l.id+'\')">👁 View</button>';
+      if(canManage()&&st!=='cleared'&&st!=='cancelled')h+='<button class="ab" onclick="openLTModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>';
+      if(canDo('admin'))h+='<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;" onclick="deleteLT(\''+l.id+'\')">🗑</button>';
+      h+='</td></tr>';
+    });
+    h+='</tbody></table></div></div>';
+  }
   mc.innerHTML=h;
 }
+function ltToggleClientType(){
+  var t=document.getElementById('lt_client_type').value;
+  document.getElementById('lt_individual_sec').style.display=t==='individual'?'block':'none';
+  document.getElementById('lt_company_sec').style.display=t==='company'?'block':'none';
+}
 function openLTModal(editId){
-  _ltEditId=editId||null;var l=editId?longTermLoans.filter(function(x){return x.id===editId;})[0]:null;
+  _ltEditId=editId||null;
+  var l=editId?longTermLoans.filter(function(x){return x.id===editId;})[0]:null;
   var e=document.getElementById('ltmod');if(e)e.remove();
-  var h='<div class="mo op" id="ltmod"><div class="md mlg" style="margin-top:10px;"><div class="mtt">💼 '+(l?'Edit':'New')+' Long Term Loan</div>';
-  h+='<div class="fsec"><div class="fst">Client Information</div><div class="fr3">';
-  h+='<div class="fg"><label class="fl">Client Full Name *</label><input class="fi" id="lt_name" value="'+esc(l?l.clientName:'')+'"></div>';
-  h+='<div class="fg"><label class="fl">Contact *</label><input class="fi" id="lt_contact" value="'+esc(l?l.contact:'')+'"></div>';
-  h+='<div class="fg"><label class="fl">Location *</label><input class="fi" id="lt_loc" value="'+esc(l?l.location:'')+'"></div>';
+  var ct=l?l.clientType||'individual':'individual';
+  var sh=l?l.shareholders||[{}]:[{}];
+  var cols=l?l.collateralItems||[{}]:[{}];
+  var sc=l?l.spousalConsent||{}:{};
+  var sd=l?l.secondDirector||{}:{};
+  var nk=l?l.nextOfKin||{}:{};
+  var co=l?l.consent||{}:{};
+  var h='<div class="mo op" id="ltmod"><div class="md mlg" style="margin-top:10px;max-width:920px;">';
+  h+='<div class="mtt">💼 '+(l?'Edit':'New')+' Long Term Loan Application</div>';
+
+  // ── Client Type ──
+  h+='<div class="fsec"><div class="fst">Application Type</div>';
+  h+='<div class="fg"><label class="fl">Client Type *</label><select class="fsel" id="lt_client_type" onchange="ltToggleClientType()" style="max-width:260px;">';
+  h+='<option value="individual"'+(ct==='individual'?' selected':'')+'>👤 Individual</option>';
+  h+='<option value="company"'+(ct==='company'?' selected':'')+'>🏢 Company / Partnership</option>';
+  h+='</select></div>';
+  h+='<div class="fr3"><div class="fg"><label class="fl">Loan Cycle</label><select class="fsel" id="lt_cycle"><option value="New"'+(l&&l.loanCycle==='New'?' selected':'')+'>New Client</option><option value="Repeat"'+(l&&l.loanCycle==='Repeat'?' selected':'')+'>Repeat Client</option></select></div></div>';
+  h+='</div>';
+
+  // ── Individual Section ──
+  h+='<div id="lt_individual_sec" style="display:'+(ct==='individual'?'block':'none')+';">';
+  h+='<div class="fsec"><div class="fst">Particulars of Applicant — Individual</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Full Name *</label><input class="fi" id="lt_name" value="'+esc(l?l.clientName:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Gender</label><select class="fsel" id="lt_gender"><option value="">—</option><option value="Male"'+(l&&l.gender==='Male'?' selected':'')+'>Male</option><option value="Female"'+(l&&l.gender==='Female'?' selected':'')+'>Female</option></select></div>';
+  h+='<div class="fg"><label class="fl">NRC / ID Number</label><input class="fi" id="lt_nrc" value="'+esc(l?l.nrc||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Nationality</label><input class="fi" id="lt_nationality" value="'+esc(l?l.nationality||'Zambian':'Zambian')+'"></div>';
+  h+='<div class="fg"><label class="fl">Date of Birth</label><input class="fi" type="date" id="lt_dob" value="'+esc(l?l.dob||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Address *</label><input class="fi" id="lt_address" value="'+esc(l?l.location||'':'')+'"></div>';
   h+='</div></div>';
-  h+='<div class="fsec"><div class="fst">Collateral &amp; Compliance</div>';
-  h+='<div class="fg"><label class="fl">Collateral Description *</label><textarea class="fi" id="lt_col" rows="2">'+esc(l?l.collateral:'')+'</textarea></div>';
-  h+='<div class="fr3">';
-  h+='<div class="fg"><label class="fl">Collateral Type</label><select class="fsel" id="lt_coltype"><option value="Appliances"'+(l&&l.collateralType==='Appliances'?' selected':'')+'>Appliances</option><option value="Vehicle"'+(l&&l.collateralType==='Vehicle'?' selected':'')+'>Vehicle (White Book + Tracker)</option><option value="Title Deed"'+(l&&l.collateralType==='Title Deed'?' selected':'')+'>Title Deed (Caveat)</option><option value="Other"'+(l&&l.collateralType==='Other'?' selected':'')+'>Other</option></select></div>';
-  h+='<div class="fg"><label class="fl">Tracker Installed?</label><select class="fsel" id="lt_tracker"><option value="N/A">N/A</option><option value="Yes"'+(l&&l.trackerStatus==='Yes'?' selected':'')+'>Yes ✓</option><option value="No"'+(l&&l.trackerStatus==='No'?' selected':'')+'>No ✗</option></select></div>';
-  h+='<div class="fg"><label class="fl">Caveat / Search Done?</label><select class="fsel" id="lt_caveat"><option value="N/A">N/A</option><option value="Yes"'+(l&&l.caveatStatus==='Yes'?' selected':'')+'>Yes ✓</option><option value="No"'+(l&&l.caveatStatus==='No'?' selected':'')+'>No ✗</option></select></div>';
+  h+='</div>';
+
+  // ── Company Section ──
+  h+='<div id="lt_company_sec" style="display:'+(ct==='company'?'block':'none')+';">';
+  h+='<div class="fsec"><div class="fst">Particulars of Applicant — Company / Partnership</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">List all shareholders / directors</div>';
+  // Shareholder rows
+  h+='<div id="lt_sh_rows">';
+  var shCount=Math.max(sh.length,1);
+  for(var si=0;si<shCount;si++){
+    var shItem=sh[si]||{};
+    h+='<div class="fr3" style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;" id="lt_sh_'+si+'">';
+    h+='<div class="fg"><label class="fl">Name</label><input class="fi" id="lt_sh_name_'+si+'" value="'+esc(shItem.name||'')+'"></div>';
+    h+='<div class="fg"><label class="fl">Share %</label><input class="fi" type="number" id="lt_sh_pct_'+si+'" value="'+esc(shItem.pct||'')+'"></div>';
+    h+='<div class="fg"><label class="fl">NRC / ID</label><input class="fi" id="lt_sh_nrc_'+si+'" value="'+esc(shItem.nrc||'')+'"></div>';
+    h+='<div class="fg"><label class="fl">Nationality</label><input class="fi" id="lt_sh_nat_'+si+'" value="'+esc(shItem.nationality||'Zambian')+'"></div>';
+    h+='<div class="fg"><label class="fl">Mobile / Account No</label><input class="fi" id="lt_sh_mob_'+si+'" value="'+esc(shItem.mobile||'')+'"></div>';
+    h+='<div class="fg"><label class="fl">Address</label><input class="fi" id="lt_sh_addr_'+si+'" value="'+esc(shItem.address||'')+'"></div>';
+    h+='</div>';
+  }
+  h+='</div>';
+  h+='<input type="hidden" id="lt_sh_count" value="'+shCount+'">';
+  h+='<button type="button" onclick="ltAddShareholder()" style="background:transparent;border:1px dashed var(--border);color:var(--muted);font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:\'DM Sans\',sans-serif;">+ Add Shareholder</button>';
+  h+='<div class="fg" style="margin-top:12px;"><label class="fl">Company Name *</label><input class="fi" id="lt_co_name" value="'+esc(l?l.companyName||'':'')+'"></div>';
+  h+='</div>';
+  h+='</div>';
+
+  // ── Business Particulars ──
+  h+='<div class="fsec"><div class="fst">Particulars of Business</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Type of Business</label><input class="fi" id="lt_biz_type" value="'+esc(l?l.bizType||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Years of Operation</label><input class="fi" id="lt_biz_years" value="'+esc(l?l.bizYears||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Business Reg. Number</label><input class="fi" id="lt_biz_regno" value="'+esc(l?l.bizRegNo||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Number of Employees</label><input class="fi" type="number" id="lt_biz_emps" value="'+esc(l?l.bizEmployees||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">T-Pin Number</label><input class="fi" id="lt_tpin" value="'+esc(l?l.tpin||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Value of Business Assets (ZMW)</label><input class="fi" type="number" id="lt_biz_assets" value="'+esc(l?l.bizAssets||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Gross Monthly Sales/Income (ZMW)</label><input class="fi" type="number" id="lt_biz_income" value="'+esc(l?l.bizIncome||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Business Address</label><input class="fi" id="lt_biz_addr" value="'+esc(l?l.bizAddress||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Contact / Phone *</label><input class="fi" id="lt_contact" value="'+esc(l?l.contact||'':'')+'"></div>';
   h+='</div></div>';
-  h+='<div class="fsec"><div class="fst">Loan Details</div><div class="fr3">';
-  h+='<div class="fg"><label class="fl">Amount Given (ZMW) *</label><input class="fi" type="number" id="lt_amt" min="20000" max="1000000" value="'+(l?l.amountGiven:'')+'" oninput="ltCalcModal()"></div>';
+
+  // ── Loan Information ──
+  h+='<div class="fsec"><div class="fst">Loan Information</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Amount Applied For (ZMW) *</label><input class="fi" type="number" id="lt_amt" min="20000" max="1000000" value="'+(l?l.amountGiven:'')+'" oninput="ltCalcModal()"></div>';
+  h+='<div class="fg"><label class="fl">Loan Purpose *</label><input class="fi" id="lt_purpose" value="'+esc(l?l.loanPurpose||'':'')+'"></div>';
   h+='<div class="fg"><label class="fl">Term (Months) *</label><select class="fsel" id="lt_mo" onchange="ltCalcModal()">';
-  for(var m=1;m<=12;m++)h+='<option value="'+m+'"'+(l&&l.termMonths===m?' selected':'')+'>'+m+' Month'+(m>1?'s':'')+'</option>';
+  for(var mi=1;mi<=12;mi++){h+='<option value="'+mi+'"'+(l&&l.termMonths===mi?' selected':'')+'>'+mi+' Month'+(mi>1?'s':'')+'</option>';}
   h+='</select></div>';
   h+='<div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="lt_date" value="'+(l?l.dateGiven:td_())+'" onchange="ltCalcModal()"></div>';
   h+='</div></div>';
   h+='<div class="cb" id="lt_sum"><div style="font-size:12px;color:var(--muted);">Fill in amount and term to see calculation</div></div>';
-  h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="lt_notes" value="'+esc(l?l.notes:'')+'"></div>';
-  h+='<div class="mft"><button class="btn bto" onclick="closeLTModal()">Cancel</button><button class="btn btg" onclick="saveLT()">💼 '+(l?'Update':'Issue Loan')+'</button></div>';
+
+  // ── Collateral ──
+  h+='<div class="fsec"><div class="fst">Collateral</div>';
+  h+='<div id="lt_col_rows">';
+  var colCount=Math.max(cols.length,1);
+  for(var ci=0;ci<colCount;ci++){
+    var colItem=cols[ci]||{};
+    h+='<div class="fr3" style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;" id="lt_col_'+ci+'">';
+    h+='<div class="fg"><label class="fl">Collateral Type</label><input class="fi" id="lt_col_type_'+ci+'" placeholder="e.g. Motor Vehicle, Property" value="'+esc(colItem.type||'')+'"></div>';
+    h+='<div class="fg"><label class="fl">Description</label><input class="fi" id="lt_col_desc_'+ci+'" value="'+esc(colItem.description||'')+'"></div>';
+    h+='<div class="fg"><label class="fl">Purchase Price (ZMW)</label><input class="fi" type="number" id="lt_col_price_'+ci+'" value="'+esc(colItem.purchasePrice||'')+'"></div>';
+    h+='<div class="fg"><label class="fl">Estimated Current Value (ZMW)</label><input class="fi" type="number" id="lt_col_val_'+ci+'" value="'+esc(colItem.currentValue||'')+'"></div>';
+    h+='</div>';
+  }
+  h+='</div>';
+  h+='<input type="hidden" id="lt_col_count" value="'+colCount+'">';
+  h+='<button type="button" onclick="ltAddCollateral()" style="background:transparent;border:1px dashed var(--border);color:var(--muted);font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:\'DM Sans\',sans-serif;">+ Add Collateral Row</button>';
+  h+='<div class="fr3" style="margin-top:14px;">';
+  h+='<div class="fg"><label class="fl">Marital Status</label><select class="fsel" id="lt_marital"><option value="">—</option><option value="Single"'+(l&&l.maritalStatus==='Single'?' selected':'')+'>Single</option><option value="Married"'+(l&&l.maritalStatus==='Married'?' selected':'')+'>Married</option><option value="Divorced"'+(l&&l.maritalStatus==='Divorced'?' selected':'')+'>Divorced</option><option value="Widowed"'+(l&&l.maritalStatus==='Widowed'?' selected':'')+'>Widowed</option></select></div>';
+  h+='<div class="fg"><label class="fl">Tracker Installed?</label><select class="fsel" id="lt_tracker"><option value="N/A">N/A</option><option value="Yes"'+(l&&l.trackerStatus==='Yes'?' selected':'')+'>Yes ✓</option><option value="No"'+(l&&l.trackerStatus==='No'?' selected':'')+'>No ✗</option></select></div>';
+  h+='<div class="fg"><label class="fl">Caveat / Search Done?</label><select class="fsel" id="lt_caveat"><option value="N/A">N/A</option><option value="Yes"'+(l&&l.caveatStatus==='Yes'?' selected':'')+'>Yes ✓</option><option value="No"'+(l&&l.caveatStatus==='No'?' selected':'')+'>No ✗</option></select></div>';
+  h+='</div>';
+  h+='</div>';
+
+  // ── Spousal Consent ──
+  h+='<div class="fsec"><div class="fst">Spousal Consent (if applicable)</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Spouse Full Name</label><input class="fi" id="lt_sp_name" value="'+esc(sc.spouseName||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Spouse NRC</label><input class="fi" id="lt_sp_nrc" value="'+esc(sc.spouseNRC||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Plot Number</label><input class="fi" id="lt_sp_plot" value="'+esc(sc.plotNo||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Spouse Phone</label><input class="fi" id="lt_sp_phone" value="'+esc(sc.spousePhone||'')+'"></div>';
   h+='</div></div>';
-  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);ltCalcModal();
+
+  // ── Second Director ──
+  h+='<div class="fsec"><div class="fst">Second Director (if applicable)</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Full Name</label><input class="fi" id="lt_sd_name" value="'+esc(sd.name||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">NRC</label><input class="fi" id="lt_sd_nrc" value="'+esc(sd.nrc||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Date of Birth</label><input class="fi" type="date" id="lt_sd_dob" value="'+esc(sd.dob||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Residential Address</label><input class="fi" id="lt_sd_res" value="'+esc(sd.resAddress||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Business Address</label><input class="fi" id="lt_sd_biz" value="'+esc(sd.bizAddress||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Phone Number</label><input class="fi" id="lt_sd_phone" value="'+esc(sd.phone||'')+'"></div>';
+  h+='</div></div>';
+
+  // ── Next of Kin ──
+  h+='<div class="fsec"><div class="fst">Next of Kin</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Full Name</label><input class="fi" id="lt_nk_name" value="'+esc(nk.name||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">NRC</label><input class="fi" id="lt_nk_nrc" value="'+esc(nk.nrc||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Date of Birth</label><input class="fi" type="date" id="lt_nk_dob" value="'+esc(nk.dob||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Residential Address</label><input class="fi" id="lt_nk_res" value="'+esc(nk.resAddress||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Business Address</label><input class="fi" id="lt_nk_biz" value="'+esc(nk.bizAddress||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Phone Number</label><input class="fi" id="lt_nk_phone" value="'+esc(nk.phone||'')+'"></div>';
+  h+='</div></div>';
+
+  // ── Declaration / Consent ──
+  h+='<div class="fsec"><div class="fst">📝 Declaration & Consent</div>';
+  h+='<div style="background:rgba(30,132,73,.05);border:1px solid rgba(30,132,73,.15);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--muted);line-height:2;">';
+  h+='I, <input class="fi" id="lt_con_name" placeholder="Full name *" value="'+esc(co.fullName||'')+'" style="display:inline;width:220px;padding:4px 10px;margin:0 4px;font-size:12px;"> a resident at ';
+  h+='<input class="fi" id="lt_con_addr" placeholder="Residential address *" value="'+esc(co.residentAddress||'')+'" style="display:inline;width:260px;padding:4px 10px;margin:0 4px;font-size:12px;"> do hereby apply for a loan from SALTY ENTERPRISES.</div>';
+  h+='<div class="fr3">';
+  h+='<div class="fg"><label class="fl">Net Amount (to receive)</label><input class="fi" type="number" id="lt_con_net" value="'+(co.netAmount||'')+'" placeholder="Auto-calculated"></div>';
+  h+='<div class="fg"><label class="fl">Repayment Date *</label><input class="fi" type="date" id="lt_con_repdate" value="'+esc(co.repaymentDate||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Zanaco Account Number</label><input class="fi" id="lt_con_bank" value="'+esc(co.bankAccount||'')+'"></div>';
+  h+='</div>';
+  h+='<div class="fg" style="margin-top:8px;"><label class="fl">Notes</label><input class="fi" id="lt_notes" value="'+esc(l?l.notes||'':'')+'"></div>';
+  h+='</div>';
+
+  // ── Signatures ──
+  h+='<div class="fsec"><div class="fst">✍️ Signatures</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Borrower Signature</label>'+_sigCanvas('lt_sig_client',l?l.clientSig||null:null)+'</div>';
+  h+='<div class="fg"><label class="fl">Salty Enterprises Rep</label>'+_sigCanvas('lt_sig_rep',l?l.repSig||null:null)+'</div>';
+  h+='<div class="fg"><label class="fl">Second Director Signature</label>'+_sigCanvas('lt_sig_dir2',l?l.dir2Sig||null:null)+'</div>';
+  h+='</div></div>';
+
+  h+='<div class="mft"><button class="btn bto" onclick="closeLTModal()">Cancel</button><button class="btn btg" onclick="saveLT()">💼 '+(l?'Update':'Save Application')+'</button></div>';
+  h+='</div></div>';
+  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);
+  ltCalcModal();
+  initSigPad('lt_sig_client');
+  initSigPad('lt_sig_rep');
+  initSigPad('lt_sig_dir2');
+}
+function ltAddShareholder(){
+  var cnt=parseInt(document.getElementById('lt_sh_count').value)||1;
+  if(cnt>=6){toast('Maximum 6 shareholders.');return;}
+  var container=document.getElementById('lt_sh_rows');
+  var div=document.createElement('div');
+  div.className='fr3';
+  div.style.cssText='background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;';
+  div.id='lt_sh_'+cnt;
+  div.innerHTML='<div class="fg"><label class="fl">Name</label><input class="fi" id="lt_sh_name_'+cnt+'"></div><div class="fg"><label class="fl">Share %</label><input class="fi" type="number" id="lt_sh_pct_'+cnt+'"></div><div class="fg"><label class="fl">NRC / ID</label><input class="fi" id="lt_sh_nrc_'+cnt+'"></div><div class="fg"><label class="fl">Nationality</label><input class="fi" id="lt_sh_nat_'+cnt+'" value="Zambian"></div><div class="fg"><label class="fl">Mobile / Account No</label><input class="fi" id="lt_sh_mob_'+cnt+'"></div><div class="fg"><label class="fl">Address</label><input class="fi" id="lt_sh_addr_'+cnt+'"></div>';
+  container.appendChild(div);
+  document.getElementById('lt_sh_count').value=cnt+1;
+}
+function ltAddCollateral(){
+  var cnt=parseInt(document.getElementById('lt_col_count').value)||1;
+  if(cnt>=7){toast('Maximum 7 collateral items.');return;}
+  var container=document.getElementById('lt_col_rows');
+  var div=document.createElement('div');
+  div.className='fr3';
+  div.style.cssText='background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;';
+  div.id='lt_col_'+cnt;
+  div.innerHTML='<div class="fg"><label class="fl">Collateral Type</label><input class="fi" id="lt_col_type_'+cnt+'" placeholder="e.g. Motor Vehicle, Property"></div><div class="fg"><label class="fl">Description</label><input class="fi" id="lt_col_desc_'+cnt+'"></div><div class="fg"><label class="fl">Purchase Price (ZMW)</label><input class="fi" type="number" id="lt_col_price_'+cnt+'"></div><div class="fg"><label class="fl">Estimated Current Value (ZMW)</label><input class="fi" type="number" id="lt_col_val_'+cnt+'"></div>';
+  container.appendChild(div);
+  document.getElementById('lt_col_count').value=cnt+1;
 }
 function closeLTModal(){var m=document.getElementById('ltmod');if(m)m.remove();}
-function ltCalcModal(){var amt=parseFloat(document.getElementById('lt_amt')&&document.getElementById('lt_amt').value)||0,mo=parseInt(document.getElementById('lt_mo')&&document.getElementById('lt_mo').value)||1,sum=document.getElementById('lt_sum');if(!sum)return;if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in amount and term to see calculation</div>';return;}var c=ltCalc(amt,mo);if(!c){sum.innerHTML='<div style="font-size:12px;color:var(--red2);">Amount must be between K20,000 and K1,000,000</div>';return;}var tlabels=['K20k–K50k','K51k–K150k','K151k–K250k','K251k–K1M'];var ti=LT_TIERS.indexOf(c.tier);sum.innerHTML='<div style="display:flex;gap:14px;flex-wrap:wrap;"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Tier</div><div style="font-size:14px;font-weight:700;color:var(--ok2);">'+tlabels[ti]+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Rate</div><div style="font-size:14px;font-weight:700;color:var(--warn);">'+(c.tier.rate*100)+'%/mo</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Svc Charge ('+(c.tier.svc*100)+'%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svcAmt)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Disbursed to Client</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.disb)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Monthly Payment</div><div style="font-size:18px;font-weight:700;">'+zmw(c.monthly)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Total Expected</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.totalDue)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Expected Profit</div><div style="font-size:18px;font-weight:700;color:var(--ok2);">'+zmw(c.intTotal+c.svcAmt)+'</div></div></div>';}
+function ltCalcModal(){
+  var amt=parseFloat(document.getElementById('lt_amt')&&document.getElementById('lt_amt').value)||0;
+  var mo=parseInt(document.getElementById('lt_mo')&&document.getElementById('lt_mo').value)||1;
+  var sum=document.getElementById('lt_sum');if(!sum)return;
+  if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in amount and term to see calculation</div>';return;}
+  var c=ltCalc(amt,mo);
+  if(!c){sum.innerHTML='<div style="font-size:12px;color:var(--red2);">Amount must be between K20,000 and K1,000,000</div>';return;}
+  var tlabels=['K20k–K50k','K51k–K150k','K151k–K250k','K251k–K1M'];
+  var ti=LT_TIERS.indexOf(c.tier);
+  // Auto-fill net amount in consent
+  var netEl=document.getElementById('lt_con_net');
+  if(netEl&&!netEl.value)netEl.value=c.disb;
+  sum.innerHTML='<div style="display:flex;gap:14px;flex-wrap:wrap;"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Tier</div><div style="font-size:14px;font-weight:700;color:var(--ok2);">'+tlabels[ti]+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Rate</div><div style="font-size:14px;font-weight:700;color:var(--warn);">'+(c.tier.rate*100)+'%/mo</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Svc Charge ('+(c.tier.svc*100)+'%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svcAmt)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Disbursed to Client</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.disb)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Monthly Payment</div><div style="font-size:18px;font-weight:700;">'+zmw(c.monthly)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Total Expected</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.totalDue)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Expected Profit</div><div style="font-size:18px;font-weight:700;color:var(--ok2);">'+zmw(c.intTotal+c.svcAmt)+'</div></div></div>';
+}
+function _ltGatherShareholders(){
+  var cnt=parseInt(document.getElementById('lt_sh_count').value)||1;
+  var arr=[];
+  for(var i=0;i<cnt;i++){
+    var n=(document.getElementById('lt_sh_name_'+i)||{value:''}).value.trim();
+    if(!n)continue;
+    arr.push({name:n,pct:(document.getElementById('lt_sh_pct_'+i)||{value:''}).value.trim(),nrc:(document.getElementById('lt_sh_nrc_'+i)||{value:''}).value.trim(),nationality:(document.getElementById('lt_sh_nat_'+i)||{value:'Zambian'}).value.trim(),mobile:(document.getElementById('lt_sh_mob_'+i)||{value:''}).value.trim(),address:(document.getElementById('lt_sh_addr_'+i)||{value:''}).value.trim()});
+  }
+  return arr;
+}
+function _ltGatherCollateral(){
+  var cnt=parseInt(document.getElementById('lt_col_count').value)||1;
+  var arr=[];
+  for(var i=0;i<cnt;i++){
+    var t=(document.getElementById('lt_col_type_'+i)||{value:''}).value.trim();
+    if(!t)continue;
+    arr.push({type:t,description:(document.getElementById('lt_col_desc_'+i)||{value:''}).value.trim(),purchasePrice:parseFloat((document.getElementById('lt_col_price_'+i)||{value:''}).value)||0,currentValue:parseFloat((document.getElementById('lt_col_val_'+i)||{value:''}).value)||0});
+  }
+  return arr;
+}
 function saveLT(){
-  var name=(document.getElementById('lt_name').value||'').trim(),contact=(document.getElementById('lt_contact').value||'').trim(),loc=(document.getElementById('lt_loc').value||'').trim(),col=(document.getElementById('lt_col').value||'').trim(),amt=parseFloat(document.getElementById('lt_amt').value)||0,mo=parseInt(document.getElementById('lt_mo').value)||1,date=document.getElementById('lt_date').value;
-  if(!name||!contact||!loc||!col||!amt||!date){toast('Please fill all required fields.');return;}
+  var clientType=document.getElementById('lt_client_type').value;
+  var name='',contact='',loc='';
+  if(clientType==='individual'){
+    name=(document.getElementById('lt_name').value||'').trim();
+    loc=(document.getElementById('lt_address').value||'').trim();
+  } else {
+    name=(document.getElementById('lt_co_name').value||'').trim();
+    loc=(document.getElementById('lt_biz_addr').value||'').trim();
+  }
+  contact=(document.getElementById('lt_contact').value||'').trim();
+  var amt=parseFloat(document.getElementById('lt_amt').value)||0;
+  var mo=parseInt(document.getElementById('lt_mo').value)||1;
+  var date=document.getElementById('lt_date').value;
+  var purpose=(document.getElementById('lt_purpose').value||'').trim();
+  if(!name||!contact||!amt||!date){toast('Please fill all required fields (name, contact, amount, date).');return;}
   var c=ltCalc(amt,mo);if(!c){toast('Amount must be between K20,000 and K1,000,000.');return;}
   var pmts=[];for(var m=1;m<=mo;m++)pmts.push({month:m,dueDate:ltMonthDate(date,m),amountDue:c.monthly,amountPaid:0,datePaid:null});
-  if(_ltEditId){var l=longTermLoans.filter(function(x){return x.id===_ltEditId;})[0];if(l){l.clientName=name;l.contact=contact;l.location=loc;l.collateral=col;l.collateralType=document.getElementById('lt_coltype').value;l.trackerStatus=document.getElementById('lt_tracker').value;l.caveatStatus=document.getElementById('lt_caveat').value;l.amountGiven=amt;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svcAmt;l.disbursedAmount=c.disb;l.interestRate=c.tier.rate;l.monthlyPayment=c.monthly;l.totalDue=c.totalDue;l.totalInterest=c.intTotal;l.notes=(document.getElementById('lt_notes').value||'').trim();if(l.payments.length!==mo)l.payments=pmts;}var _ltUp=longTermLoans.filter(function(x){return x.id===_ltEditId;})[0];if(_ltUp)_markDirty('lt',_ltEditId);logAct('Updated LT loan — '+name);}
-  else if(canDirectCreate()){var _newLT={id:'LT-'+Date.now(),clientName:name,contact:contact,location:loc,collateral:col,collateralType:document.getElementById('lt_coltype').value,trackerStatus:document.getElementById('lt_tracker').value,caveatStatus:document.getElementById('lt_caveat').value,amountGiven:amt,termMonths:mo,dateGiven:date,serviceCharge:c.svcAmt,disbursedAmount:c.disb,interestRate:c.tier.rate,monthlyPayment:c.monthly,totalDue:c.totalDue,totalInterest:c.intTotal,payments:pmts,status:'active',notes:(document.getElementById('lt_notes').value||'').trim(),createdBy:cu.display,createdAt:now_()};longTermLoans.push(_newLT);_markDirty('lt',_newLT.id);logAct('LT loan — '+name+' — '+zmw(amt));}
-  if(!canDirectCreate()){
-    var appObj={id:'APP-'+Date.now(),type:'longterm',clientName:name,contact:contact,location:loc,collateral:col,collateralType:document.getElementById('lt_coltype').value,amountGiven:amt,termMonths:mo,dateGiven:date,product:'💼 Long Term Loan',amount:amt,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
-    corpApplications.push(appObj);
-    logAct('Submitted LT loan application for '+name+' — awaiting admin approval');
-    save();closeLTModal();toast('Application submitted for admin approval! ✓');renderLongTermLoans(document.getElementById('mainct'));buildNav();
+  var shareholders=_ltGatherShareholders();
+  var collateralItems=_ltGatherCollateral();
+  var spousalConsent={spouseName:(document.getElementById('lt_sp_name').value||'').trim(),spouseNRC:(document.getElementById('lt_sp_nrc').value||'').trim(),plotNo:(document.getElementById('lt_sp_plot').value||'').trim(),spousePhone:(document.getElementById('lt_sp_phone').value||'').trim()};
+  var secondDirector={name:(document.getElementById('lt_sd_name').value||'').trim(),nrc:(document.getElementById('lt_sd_nrc').value||'').trim(),dob:(document.getElementById('lt_sd_dob').value||''),resAddress:(document.getElementById('lt_sd_res').value||'').trim(),bizAddress:(document.getElementById('lt_sd_biz').value||'').trim(),phone:(document.getElementById('lt_sd_phone').value||'').trim()};
+  var nextOfKin={name:(document.getElementById('lt_nk_name').value||'').trim(),nrc:(document.getElementById('lt_nk_nrc').value||'').trim(),dob:(document.getElementById('lt_nk_dob').value||''),resAddress:(document.getElementById('lt_nk_res').value||'').trim(),bizAddress:(document.getElementById('lt_nk_biz').value||'').trim(),phone:(document.getElementById('lt_nk_phone').value||'').trim()};
+  var conNet=parseFloat(document.getElementById('lt_con_net').value)||c.disb;
+  var consent={fullName:(document.getElementById('lt_con_name').value||'').trim(),residentAddress:(document.getElementById('lt_con_addr').value||'').trim(),netAmount:conNet,repaymentDate:(document.getElementById('lt_con_repdate').value||''),bankAccount:(document.getElementById('lt_con_bank').value||'').trim()};
+  var clientSig=getSig('lt_sig_client');
+  var repSig=getSig('lt_sig_rep');
+  var dir2Sig=getSig('lt_sig_dir2');
+  var obj={
+    clientType:clientType,clientName:name,companyName:clientType==='company'?name:'',
+    gender:(document.getElementById('lt_gender')||{value:''}).value,
+    nrc:(document.getElementById('lt_nrc')||{value:''}).value.trim(),
+    nationality:(document.getElementById('lt_nationality')||{value:'Zambian'}).value.trim(),
+    dob:(document.getElementById('lt_dob')||{value:''}).value,
+    location:loc,contact:contact,loanCycle:document.getElementById('lt_cycle').value,
+    shareholders:shareholders,
+    bizType:(document.getElementById('lt_biz_type').value||'').trim(),
+    bizYears:(document.getElementById('lt_biz_years').value||'').trim(),
+    bizRegNo:(document.getElementById('lt_biz_regno').value||'').trim(),
+    bizEmployees:(document.getElementById('lt_biz_emps').value||'').trim(),
+    tpin:(document.getElementById('lt_tpin').value||'').trim(),
+    bizAssets:parseFloat(document.getElementById('lt_biz_assets').value)||0,
+    bizIncome:parseFloat(document.getElementById('lt_biz_income').value)||0,
+    bizAddress:(document.getElementById('lt_biz_addr').value||'').trim(),
+    amountGiven:amt,loanPurpose:purpose,termMonths:mo,dateGiven:date,
+    serviceCharge:c.svcAmt,disbursedAmount:c.disb,interestRate:c.tier.rate,
+    monthlyPayment:c.monthly,totalDue:c.totalDue,totalInterest:c.intTotal,
+    collateralItems:collateralItems,
+    maritalStatus:(document.getElementById('lt_marital').value||''),
+    trackerStatus:document.getElementById('lt_tracker').value,
+    caveatStatus:document.getElementById('lt_caveat').value,
+    spousalConsent:spousalConsent,secondDirector:secondDirector,nextOfKin:nextOfKin,
+    consent:consent,clientSig:clientSig,repSig:repSig,dir2Sig:dir2Sig,
+    notes:(document.getElementById('lt_notes').value||'').trim()
+  };
+  if(_ltEditId){
+    var l=longTermLoans.filter(function(x){return x.id===_ltEditId;})[0];
+    if(l){Object.assign(l,obj);if(l.payments.length!==mo)l.payments=pmts;}
+    _markDirty('lt',_ltEditId);logAct('Updated LT loan — '+name);
+    save();closeLTModal();toast('Loan updated! ✓');renderLongTermLoans(document.getElementById('mainct'));
+  } else if(canDirectCreate()){
+    obj.id='LT-'+Date.now();obj.payments=pmts;obj.status='active';obj.createdBy=cu.display;obj.createdAt=now_();
+    longTermLoans.push(obj);_markDirty('lt',obj.id);logAct('LT loan — '+name+' — '+zmw(amt));
+    save();closeLTModal();toast('Loan application saved! 💼');renderLongTermLoans(document.getElementById('mainct'));
   } else {
-    save();closeLTModal();toast('Loan saved!');renderLongTermLoans(document.getElementById('mainct'));
+    obj.id='APP-'+Date.now();obj.product='💼 Long Term Loan';obj.amount=amt;obj.status='pending';
+    obj.submittedBy=cu.username;obj.submittedByName=cu.display;obj.createdAt=now_();
+    obj.adminNote='';obj.decidedBy='';obj.decidedAt='';
+    corpApplications.push(obj);_markDirty('meta','');
+    logAct('Submitted LT application for '+name+' — awaiting admin approval');
+    save();closeLTModal();toast('Application submitted for approval! ✓');buildNav();renderLongTermLoans(document.getElementById('mainct'));
   }
 }
 function ltView(id){
   var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
   var st=ltStatus(l),paid=ltTotalPaid(l),bal=ltBalance(l),mc=document.getElementById('mainct');
-  var h='<button class="bk" onclick="renderLongTermLoans(document.getElementById(\'mainct\'))">← Back</button>';
+  var h='<button class="bk" onclick="renderLongTermLoans(document.getElementById(\'mainct\'))">← Back to Long Term Loans</button>';
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">';
+  h+='<button class="btn btg" onclick="printLTApplication(\''+id+'\')" style="padding:10px 20px;">🖨️ Print Application Form</button>';
+  if(canManage()&&st!=='cleared'&&st!=='cancelled')h+='<button class="btn bto" onclick="openLTModal(\''+id+'\')" style="padding:10px 16px;">✏️ Edit</button>';
+  if(canDo('admin'))h+='<button class="btn btd" onclick="deleteLT(\''+id+'\')" style="padding:10px 16px;">🗑 Delete</button>';
+  h+='</div>';
   h+='<div style="background:linear-gradient(135deg,#0a1f10,#1a3a24);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;">';
-  h+='<div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">LONG TERM LOAN · '+esc(l.id)+'</div>';
+  h+='<div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">LONG TERM LOAN · '+esc(l.id)+' · '+(l.loanCycle||'New Client')+'</div>';
   h+='<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.clientName)+'</div>';
-  h+='<div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.contact)+' · '+esc(l.location)+'</div></div>';
-  h+='<div class="sg"><div class="sc"><div class="sl">Amount Given</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div><div class="sc"><div class="sl">Disbursed</div><div class="sv" style="color:var(--gold);font-size:16px;">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Monthly</div><div class="sv" style="font-size:16px;">'+zmw(l.monthlyPayment)+'</div><div class="ss">'+l.termMonths+' months</div></div><div class="sc"><div class="sl">Total Paid</div><div class="sv" style="color:var(--ok2);font-size:16px;">'+zmw(paid)+'</div><div class="ss">of '+zmw(l.totalDue)+'</div></div><div class="sc" style="border-top-color:'+(bal>0?'var(--red2)':'var(--ok2)')+'"><div class="sl">Balance</div><div class="sv" style="color:'+(bal>0?'var(--red2)':'var(--ok2)')+';font-size:16px;">'+zmw(bal)+'</div></div></div>';
-  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">🔒 Collateral</span></div><div class="cdb"><div class="rm"><span class="rml">Description</span><span class="rmv" style="font-weight:600;color:var(--warn);">'+esc(l.collateral)+'</span></div><div class="rm"><span class="rml">Type</span><span class="rmv">'+esc(l.collateralType||'—')+'</span></div>'+(l.trackerStatus&&l.trackerStatus!=='N/A'?'<div class="rm"><span class="rml">Tracker</span><span class="rmv" style="color:'+(l.trackerStatus==='Yes'?'var(--ok2)':'var(--red2)')+';">'+l.trackerStatus+'</span></div>':'')+(l.caveatStatus&&l.caveatStatus!=='N/A'?'<div class="rm"><span class="rml">Caveat/Search</span><span class="rmv" style="color:'+(l.caveatStatus==='Yes'?'var(--ok2)':'var(--red2)')+';">'+l.caveatStatus+'</span></div>':'')+'</div></div>';
+  h+='<div style="font-size:13px;opacity:.75;margin-top:4px;">'+(l.clientType==='company'?'🏢 Company':'👤 Individual')+' · '+esc(l.contact||'')+(l.nrc?' · NRC: '+esc(l.nrc):'')+'</div>';
+  h+='</div>';
+  h+='<div class="sg">';
+  h+='<div class="sc"><div class="sl">Amount Applied</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div>';
+  h+='<div class="sc"><div class="sl">Disbursed</div><div class="sv" style="color:var(--gold);font-size:16px;">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div>';
+  h+='<div class="sc"><div class="sl">Monthly Payment</div><div class="sv" style="font-size:16px;">'+zmw(l.monthlyPayment)+'</div><div class="ss">'+l.termMonths+' months</div></div>';
+  h+='<div class="sc"><div class="sl">Total Paid</div><div class="sv" style="color:var(--ok2);font-size:16px;">'+zmw(paid)+'</div><div class="ss">of '+zmw(l.totalDue)+'</div></div>';
+  h+='<div class="sc" style="border-top-color:'+(bal>0?'var(--red2)':'var(--ok2)')+'"><div class="sl">Balance Due</div><div class="sv" style="color:'+(bal>0?'var(--red2)':'var(--ok2)')+';font-size:16px;">'+zmw(bal)+'</div></div>';
+  h+='</div>';
+  // Applicant details
+  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">👤 Applicant Details</span></div><div class="cdb">';
+  if(l.gender)h+='<div class="rm"><span class="rml">Gender</span><span class="rmv">'+esc(l.gender)+'</span></div>';
+  if(l.nrc)h+='<div class="rm"><span class="rml">NRC / ID</span><span class="rmv">'+esc(l.nrc)+'</span></div>';
+  if(l.nationality)h+='<div class="rm"><span class="rml">Nationality</span><span class="rmv">'+esc(l.nationality)+'</span></div>';
+  if(l.dob)h+='<div class="rm"><span class="rml">Date of Birth</span><span class="rmv">'+fmtD(l.dob)+'</span></div>';
+  if(l.location)h+='<div class="rm"><span class="rml">Address</span><span class="rmv">'+esc(l.location)+'</span></div>';
+  if(l.maritalStatus)h+='<div class="rm"><span class="rml">Marital Status</span><span class="rmv">'+esc(l.maritalStatus)+'</span></div>';
+  if(l.loanPurpose)h+='<div class="rm"><span class="rml">Loan Purpose</span><span class="rmv">'+esc(l.loanPurpose)+'</span></div>';
+  if(l.notes)h+='<div class="rm"><span class="rml">Notes</span><span class="rmv">'+esc(l.notes)+'</span></div>';
+  h+='<div class="rm"><span class="rml">Created By</span><span class="rmv">'+esc(l.createdBy||'')+'</span></div>';
+  h+='</div></div>';
+  // Business details
+  if(l.bizType||l.bizRegNo||l.bizIncome){
+    h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">🏢 Business Particulars</span></div><div class="cdb">';
+    if(l.bizType)h+='<div class="rm"><span class="rml">Type of Business</span><span class="rmv">'+esc(l.bizType)+'</span></div>';
+    if(l.bizYears)h+='<div class="rm"><span class="rml">Years Operating</span><span class="rmv">'+esc(l.bizYears)+'</span></div>';
+    if(l.bizRegNo)h+='<div class="rm"><span class="rml">Reg. Number</span><span class="rmv">'+esc(l.bizRegNo)+'</span></div>';
+    if(l.bizEmployees)h+='<div class="rm"><span class="rml">No. of Employees</span><span class="rmv">'+esc(l.bizEmployees)+'</span></div>';
+    if(l.tpin)h+='<div class="rm"><span class="rml">T-Pin</span><span class="rmv">'+esc(l.tpin)+'</span></div>';
+    if(l.bizAssets)h+='<div class="rm"><span class="rml">Asset Value</span><span class="rmv">'+zmw(l.bizAssets)+'</span></div>';
+    if(l.bizIncome)h+='<div class="rm"><span class="rml">Gross Monthly Income</span><span class="rmv">'+zmw(l.bizIncome)+'</span></div>';
+    if(l.bizAddress)h+='<div class="rm"><span class="rml">Business Address</span><span class="rmv">'+esc(l.bizAddress)+'</span></div>';
+    h+='</div></div>';
+  }
+  // Collateral
+  if(l.collateralItems&&l.collateralItems.length){
+    h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">🔒 Collateral</span></div><div class="tw"><table><thead><tr><th>Type</th><th>Description</th><th>Purchase Price</th><th>Current Value</th></tr></thead><tbody>';
+    l.collateralItems.forEach(function(c){h+='<tr><td><strong>'+esc(c.type)+'</strong></td><td>'+esc(c.description)+'</td><td style="font-family:monospace;">'+zmw(c.purchasePrice)+'</td><td style="font-family:monospace;color:var(--gold);">'+zmw(c.currentValue)+'</td></tr>';});
+    h+='</tbody></table></div>';
+    if(l.trackerStatus&&l.trackerStatus!=='N/A')h+='<div class="cdb"><div class="rm"><span class="rml">Tracker</span><span class="rmv" style="color:'+(l.trackerStatus==='Yes'?'var(--ok2)':'var(--red2)')+';">'+l.trackerStatus+'</span></div></div>';
+    if(l.caveatStatus&&l.caveatStatus!=='N/A')h+='<div class="cdb" style="padding-top:0;"><div class="rm"><span class="rml">Caveat/Search</span><span class="rmv" style="color:'+(l.caveatStatus==='Yes'?'var(--ok2)':'var(--red2)')+';">'+l.caveatStatus+'</span></div></div>';
+    h+='</div>';
+  }
+  // Consent
+  if(l.consent&&l.consent.fullName){
+    h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📝 Declaration & Consent</span></div><div class="cdb">';
+    h+='<div class="rm"><span class="rml">Applicant Name</span><span class="rmv">'+esc(l.consent.fullName)+'</span></div>';
+    h+='<div class="rm"><span class="rml">Resident Address</span><span class="rmv">'+esc(l.consent.residentAddress||'—')+'</span></div>';
+    h+='<div class="rm"><span class="rml">Net Amount</span><span class="rmv" style="font-weight:700;color:var(--gold);">'+zmw(l.consent.netAmount||l.disbursedAmount)+'</span></div>';
+    h+='<div class="rm"><span class="rml">Repayment Date</span><span class="rmv">'+fmtD(l.consent.repaymentDate||'')+'</span></div>';
+    h+='<div class="rm"><span class="rml">Zanaco Account</span><span class="rmv">'+esc(l.consent.bankAccount||'—')+'</span></div>';
+    h+='</div></div>';
+  }
+  // Signatures
+  if(l.clientSig||l.repSig||l.dir2Sig){
+    h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">✍️ Signatures on File</span></div><div class="cdb" style="display:flex;gap:30px;flex-wrap:wrap;">';
+    if(l.clientSig)h+='<div><div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Borrower</div><img src="'+l.clientSig+'" style="height:64px;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,.3);"></div>';
+    if(l.repSig)h+='<div><div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Salty Rep</div><img src="'+l.repSig+'" style="height:64px;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,.3);"></div>';
+    if(l.dir2Sig)h+='<div><div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Second Director</div><img src="'+l.dir2Sig+'" style="height:64px;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,.3);"></div>';
+    h+='</div></div>';
+  }
+  // Payment schedule
   var today=td_();
   h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Payment Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Date Paid</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';
-  (l.payments||[]).forEach(function(p,i){var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending';h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-size:12px;">'+(p.datePaid?fmtD(p.datePaid):'—')+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>'+(canManage()?'<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="ltRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="ltUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>':'')+'</tr>';});
+  (l.payments||[]).forEach(function(p,i){
+    var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending';
+    h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-size:12px;">'+(p.datePaid?fmtD(p.datePaid):'—')+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>';
+    if(canManage())h+='<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="ltRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="ltUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>';
+    h+='</tr>';
+  });
   h+='</tbody></table></div></div>';
-  if(canManage()&&st!=='cleared'&&st!=='cancelled')h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"><button class="btn bto" style="flex:1;padding:12px;" onclick="openLTModal(\''+id+'\')">✏️ Edit</button><button class="btn btd" style="flex:1;padding:12px;" onclick="ltCancelLoan(\''+id+'\')">✗ Cancel</button></div>';
   mc.innerHTML=h;
+}
+function printLTApplication(id){
+  var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
+  var w=window.open('','_blank');
+  var conName=(l.consent&&l.consent.fullName)||l.clientName||'';
+  var conAddr=(l.consent&&l.consent.residentAddress)||l.location||'';
+  var netAmt=(l.consent&&l.consent.netAmount)||l.disbursedAmount;
+  var repDate=(l.consent&&l.consent.repaymentDate)?fmtD(l.consent.repaymentDate):'........./........./..........';
+  var bankAcc=(l.consent&&l.consent.bankAccount)||'';
+  var colDesc='';
+  if(l.collateralItems&&l.collateralItems.length){colDesc=l.collateralItems[0].type+(l.collateralItems[0].description?' — '+l.collateralItems[0].description:'');}
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Loan Application — '+esc(l.clientName)+'</title>';
+  html+='<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.6;color:#000;padding:28px 40px;}.no-print{margin-bottom:18px;}h1{font-size:14pt;text-align:center;font-weight:bold;margin:0 0 6px;text-transform:uppercase;letter-spacing:1px;}h2{font-size:11pt;font-weight:bold;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #000;padding-bottom:3px;}p{margin:5px 0;}.sig-line{display:inline-block;border-bottom:1px solid #000;min-width:160px;margin-left:4px;vertical-align:bottom;}.row{display:flex;gap:20px;margin:6px 0;flex-wrap:wrap;}.col{flex:1;min-width:160px;}.label{font-size:9.5pt;color:#555;margin-bottom:1px;}.val{border-bottom:1px solid #000;min-height:22px;padding:1px 4px;font-size:11pt;}table{width:100%;border-collapse:collapse;margin:8px 0;}th,td{border:1px solid #000;padding:5px 7px;font-size:10.5pt;}th{background:#f0f0f0;font-weight:bold;text-align:left;}.bold{font-weight:bold;}.page-break{page-break-before:always;margin-top:0;}@media print{.no-print{display:none!important;}}</style></head><body>';
+  html+='<div class="no-print"><button onclick="window.print()" style="padding:10px 24px;background:#c9a84c;color:#000;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-right:10px;">🖨️ Print / Save PDF</button><button onclick="window.close()" style="padding:10px 16px;background:#333;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;">Close</button></div>';
+  html+='<h1>Loan Application Form</h1>';
+  html+='<p style="text-align:center;margin-bottom:10px;">New Client: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> &nbsp;&nbsp; Repeat Client: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> &nbsp;&nbsp; Loan Cycle: <span class="sig-line">'+(l.loanCycle||'')+'</span></p>';
+  // Applicant
+  html+='<h2>Particulars of Applicant</h2>';
+  if(l.clientType==='individual'){
+    html+='<p style="margin-bottom:6px;"><span class="bold">INDIVIDUAL</span></p>';
+    html+='<table><thead><tr><th>Name</th><th>Gender</th><th>ID / NRC No</th><th>Nationality</th><th>Date of Birth</th><th>Address</th></tr></thead><tbody>';
+    html+='<tr><td>'+esc(l.clientName)+'</td><td>'+esc(l.gender||'')+'</td><td>'+esc(l.nrc||'')+'</td><td>'+esc(l.nationality||'Zambian')+'</td><td>'+fmtD(l.dob||'')+'</td><td>'+esc(l.location||'')+'</td></tr>';
+    html+='</tbody></table>';
+  } else {
+    html+='<p style="margin-bottom:6px;"><span class="bold">COMPANY / PARTNERSHIP: </span>'+esc(l.companyName||l.clientName)+'</p>';
+    html+='<table><thead><tr><th>Name of Shareholder</th><th>Share %</th><th>ID No</th><th>Nationality</th><th>Mobile / Account No</th><th>Address</th></tr></thead><tbody>';
+    (l.shareholders||[{name:l.clientName}]).forEach(function(sh){html+='<tr><td>'+esc(sh.name||'')+'</td><td>'+esc(sh.pct||'')+'%</td><td>'+esc(sh.nrc||'')+'</td><td>'+esc(sh.nationality||'Zambian')+'</td><td>'+esc(sh.mobile||'')+'</td><td>'+esc(sh.address||'')+'</td></tr>';});
+    html+='</tbody></table>';
+  }
+  // Business
+  html+='<h2>Particulars of Business</h2>';
+  html+='<div class="row"><div class="col"><div class="label">Type of Business</div><div class="val">'+esc(l.bizType||'')+'</div></div><div class="col"><div class="label">Years of Operation</div><div class="val">'+esc(l.bizYears||'')+'</div></div><div class="col"><div class="label">Business Reg. Number</div><div class="val">'+esc(l.bizRegNo||'')+'</div></div></div>';
+  html+='<div class="row"><div class="col"><div class="label">Number of Employees</div><div class="val">'+esc(l.bizEmployees||'')+'</div></div><div class="col"><div class="label">T-Pin Number</div><div class="val">'+esc(l.tpin||'')+'</div></div><div class="col"><div class="label">Value of Business Assets</div><div class="val">'+zmw(l.bizAssets||0)+'</div></div></div>';
+  html+='<div class="row"><div class="col"><div class="label">Gross Monthly Sales / Income</div><div class="val">'+zmw(l.bizIncome||0)+'</div></div><div class="col" style="flex:2;"><div class="label">Business Address</div><div class="val">'+esc(l.bizAddress||l.location||'')+'</div></div></div>';
+  // Loan info
+  html+='<h2>Loan Information</h2>';
+  html+='<div class="row"><div class="col"><div class="label">Amount Applied For</div><div class="val">'+zmw(l.amountGiven)+'</div></div><div class="col"><div class="label">Approved Amount</div><div class="val">&nbsp;</div></div><div class="col"><div class="label">Loan Purpose</div><div class="val">'+esc(l.loanPurpose||'')+'</div></div></div>';
+  html+='<div class="row"><div class="col"><div class="label">Loan Term Desired</div><div class="val">'+l.termMonths+' Month'+(l.termMonths>1?'s':'')+'</div></div><div class="col"><div class="label">Approved Tenure</div><div class="val">&nbsp;</div></div><div class="col"><div class="label">Monthly Payment</div><div class="val">'+zmw(l.monthlyPayment)+'</div></div></div>';
+  html+='<div class="row"><div class="col"><div class="label">Disbursed to Client</div><div class="val">'+zmw(l.disbursedAmount)+'</div></div><div class="col"><div class="label">Service Charge</div><div class="val">'+zmw(l.serviceCharge)+'</div></div><div class="col"><div class="label">Interest Rate</div><div class="val">'+((l.interestRate||0)*100)+'% / month</div></div></div>';
+  // Collateral
+  html+='<h2>Collateral</h2>';
+  html+='<table><thead><tr><th>Collateral Type</th><th>Description</th><th>Purchase Price</th><th>Estimated Current Value</th></tr></thead><tbody>';
+  var colRows=l.collateralItems&&l.collateralItems.length?l.collateralItems:[{},{},{},{}];
+  colRows.forEach(function(c){html+='<tr><td>'+esc(c.type||'')+'</td><td>'+esc(c.description||'')+'</td><td>'+zmw(c.purchasePrice||0)+'</td><td>'+zmw(c.currentValue||0)+'</td></tr>';});
+  if(colRows.length<4){for(var i=colRows.length;i<4;i++)html+='<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';}
+  html+='</tbody></table>';
+  html+='<p>Marital Status: <span class="sig-line">'+esc(l.maritalStatus||'')+'</span></p>';
+  var sp=l.spousalConsent||{};
+  if(sp.spouseName){
+    html+='<p style="margin-top:8px;">Spousal Consent: I <span class="bold">'+esc(sp.spouseName)+'</span> holder of NRC <span class="bold">'+esc(sp.spouseNRC||'_________________')+'</span> plot No. <span class="bold">'+esc(sp.plotNo||'_________________')+'</span> agree that my spouse pledges the listed item(s) above as collateral.</p>';
+    html+='<p>Phone: '+esc(sp.spousePhone||'')+'</p>';
+  }
+  // Terms & Conditions
+  html+='<h2>Loan Terms and Conditions</h2>';
+  html+='<ol style="margin:6px 0 6px 20px;"><li>The mode of payment is monthly, beginning on the immediate month-end after money is received.</li><li>The borrowed money is guaranteed by collateral such as property and car.</li><li>If client misses a payment but had made previous payments, they attract a 5% penalty.</li><li>If a client misses first payment, loan is automatically cancelled.</li><li>Upon cancellation, client is given fifteen (15) working days to settle balance with an additional 5% penalty. Failure to which, the company will start the process of seizure of the collateral.</li><li>When the final payment is not made on time as agreed, the client will be required to pay an additional 5% of the borrowed amount.</li><li>Service charge of <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> from the principal amount and a monthly charge of <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>.</li></ol>';
+  html+='<p>I do hereby agree to the terms and conditions stipulated above by signing the application form.</p>';
+  html+='<p style="margin-top:10px;">Borrower\'s Signature: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:45px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</p>';
+  // Default clause
+  html+='<h2>Default Clause</h2>';
+  html+='<ol style="margin:6px 0 6px 20px;"><li>The borrower fails to pay first instalment on the due date.</li><li>The borrower breaches the agreement by becoming non-compliant to the terms and conditions set in this agreement.</li><li>The borrower becomes insolvent or bankrupt.</li><li>The borrower permits the collateral to be disposed of, encumbered, or otherwise impaired without the lender\'s written consent.</li></ol>';
+  html+='<p>Upon the occurrence of default, the lender may declare the entire outstanding balance immediately due and payable and exercise all remedies available under the law and this agreement, including enforcement against the pledged security.</p>';
+  // Declaration & Consent
+  html+='<h2>Declaration, Authorisation &amp; Consent</h2>';
+  html+='<p>By endorsing and signing this form I/We explicitly:</p>';
+  html+='<ol style="margin:6px 0 6px 20px;font-size:10.5pt;"><li>Declare and affirm that the information given herein is true to the best of my/our knowledge and belief.</li><li>Commit to abide by the rules and regulations governing the loan application.</li><li>Authorize SALTY ENTERPRISES to verify the information given herein and refer from third parties about my/our application and business if deemed necessary.</li><li>Consent that SALTY ENTERPRISES visit my/our business and residential premises to carry out loan assessment.</li><li>Acknowledge that access to the loan facility will be subject to fulfillment of preconditions relating but not limited to submission of complete KYC, complete disclosure of the cost of credit and signing of loan contracts.</li><li>Declare being the legal owner/s of all the collateral described above.</li><li>Fully consent and allow the applicant to use my/our property whose details are specified above.</li></ol>';
+  html+='<p>I, <span class="bold">'+esc(conName)+'</span> a resident at <span class="bold">'+esc(conAddr)+'</span> do hereby apply for a loan in the sum of <span class="bold">'+zmw(l.amountGiven)+'</span> from SALTY ENTERPRISES. I have pledged a <span class="bold">'+esc(colDesc||'___________________________')+'</span> as collateral. I warrant and declare that I have read the standard terms and conditions upon which facility will be rendered to me.</p>';
+  html+='<p style="margin-top:8px;">I, <span class="bold">'+esc(conName)+'</span>, do hereby confirm and agree that the sum of <span class="bold">'+zmw(netAmt)+'</span> is the net amount I will get after disbursement of the loan. I am requesting that my repayment date be: <span class="bold">'+repDate+'</span></p>';
+  html+='<p style="margin-top:8px;"><span class="bold">I also undertake that I will promptly make my monthly instalment payments on or before the date I have chosen above by way of bank deposit under Zanaco account number '+(bankAcc?'<span class="bold">'+esc(bankAcc)+'</span>':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'.</span></p>';
+  html+='<p style="margin-top:8px;">I further declare and warrant that the information I have rendered in support of my application is true, correct, and accurate in every respect. Should any of this information be incorrect, SALTY ENTERPRISES reserves the right to withdraw its offer of the facility without bearing any legal obligation or consequence.</p>';
+  html+='<div style="display:flex;gap:40px;margin-top:20px;flex-wrap:wrap;align-items:flex-end;">';
+  html+='<div>Signed at: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>';
+  html+='<div>Date: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>';
+  html+='<div>Signature of Applicant: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:50px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</div>';
+  html+='</div>';
+  // Second Director
+  var sd2=l.secondDirector||{};
+  html+='<h2 style="margin-top:20px;">Second Director</h2>';
+  html+='<div class="row"><div class="col"><div class="label">Printed Name</div><div class="val">'+esc(sd2.name||'')+'</div></div><div class="col"><div class="label">NRC</div><div class="val">'+esc(sd2.nrc||'')+'</div></div><div class="col"><div class="label">Date of Birth</div><div class="val">'+fmtD(sd2.dob||'')+'</div></div></div>';
+  html+='<div class="row"><div class="col"><div class="label">Residential Address</div><div class="val">'+esc(sd2.resAddress||'')+'</div></div><div class="col"><div class="label">Business Address</div><div class="val">'+esc(sd2.bizAddress||'')+'</div></div><div class="col"><div class="label">Phone Number</div><div class="val">'+esc(sd2.phone||'')+'</div></div></div>';
+  html+='<p style="margin-top:10px;">Signature: '+(l.dir2Sig?'<img src="'+l.dir2Sig+'" style="height:50px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</p>';
+  // Next of Kin
+  var nk2=l.nextOfKin||{};
+  html+='<h2>Next of Kin</h2>';
+  html+='<div class="row"><div class="col"><div class="label">Printed Name</div><div class="val">'+esc(nk2.name||'')+'</div></div><div class="col"><div class="label">NRC</div><div class="val">'+esc(nk2.nrc||'')+'</div></div><div class="col"><div class="label">Date of Birth</div><div class="val">'+fmtD(nk2.dob||'')+'</div></div></div>';
+  html+='<div class="row"><div class="col"><div class="label">Residential Address</div><div class="val">'+esc(nk2.resAddress||'')+'</div></div><div class="col"><div class="label">Business Address</div><div class="val">'+esc(nk2.bizAddress||'')+'</div></div><div class="col"><div class="label">Phone Number</div><div class="val">'+esc(nk2.phone||'')+'</div></div></div>';
+  html+='<p style="margin-top:10px;">Signature: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>';
+  // Official use
+  html+='<h2>Official Use</h2>';
+  html+='<p>Prepared by: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> Sign: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> Date: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>';
+  html+='<p style="margin-top:8px;">Reviewed by: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> Sign: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> Date: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>';
+  html+='<p style="margin-top:8px;">Approved by: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> Sign: '+(l.repSig?'<img src="'+l.repSig+'" style="height:45px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+' Date: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>';
+  html+='</body></html>';
+  w.document.write(html);w.document.close();
 }
 function ltRecordPay(id,i){var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.payments[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' — Balance: '+zmw(def)+'\nEnter amount paid:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();if(ltTotalPaid(l)>=(l.totalDue-1))l.status='cleared';_markDirty('lt',l.id);logAct('LT payment — '+l.clientName+' Month '+p.month+' — '+zmw(amt));save();toast('Payment recorded!');ltView(id);}
 function ltUndoPay(id,i){var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.payments[i];if(!confirm('Undo payment for Month '+p.month+'?'))return;p.amountPaid=0;p.datePaid=null;if(l.status==='cleared')l.status='active';_markDirty('lt',l.id);save();toast('Payment undone.');ltView(id);}
 function ltCancelLoan(id){var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('Cancel loan for '+l.clientName+'?'))return;_markDirty('lt',l.id);l.status='cancelled';l.cancelledDate=td_();save();toast('Cancelled.');renderLongTermLoans(document.getElementById('mainct'));}
+
+
+// ===== SIGNATURE PAD HELPERS =====
+function initSigPad(id){
+  var c=document.getElementById(id);if(!c)return;
+  var ctx=c.getContext('2d');var dr=false,lx=0,ly=0;
+  _sigPlaceholder(id);
+  function gp(e){var r=c.getBoundingClientRect();if(e.touches)return{x:e.touches[0].clientX-r.left,y:e.touches[0].clientY-r.top};return{x:e.clientX-r.left,y:e.clientY-r.top};}
+  function st(e){e.preventDefault();dr=true;var p=gp(e);lx=p.x;ly=p.y;}
+  function mv(e){e.preventDefault();if(!dr)return;ctx.strokeStyle='#c9a84c';ctx.lineWidth=2;ctx.lineCap='round';var p=gp(e);ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(p.x,p.y);ctx.stroke();lx=p.x;ly=p.y;}
+  function en(){dr=false;}
+  c.addEventListener('mousedown',st);c.addEventListener('mousemove',mv);c.addEventListener('mouseup',en);c.addEventListener('mouseleave',en);
+  c.addEventListener('touchstart',st,{passive:false});c.addEventListener('touchmove',mv,{passive:false});c.addEventListener('touchend',en);
+}
+function _sigPlaceholder(id){
+  var c=document.getElementById(id);if(!c)return;
+  var ctx=c.getContext('2d');ctx.save();ctx.fillStyle='rgba(201,168,76,0.25)';ctx.font='12px "DM Sans",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Sign here',c.width/2,c.height/2);ctx.restore();
+}
+function clearSig(id){
+  var c=document.getElementById(id);if(!c)return;
+  c.getContext('2d').clearRect(0,0,c.width,c.height);_sigPlaceholder(id);
+}
+function getSig(id){
+  var c=document.getElementById(id);if(!c)return null;
+  var b=document.createElement('canvas');b.width=c.width;b.height=c.height;
+  if(c.toDataURL()===b.toDataURL())return null;
+  return c.toDataURL();
+}
+function _sigCanvas(canvasId,existingSig){
+  var h='<div style="background:rgba(201,168,76,.05);border:1.5px solid rgba(201,168,76,.2);border-radius:8px;padding:8px;">';
+  if(existingSig){
+    h+='<img id="'+canvasId+'_prev" src="'+existingSig+'" style="width:100%;max-width:360px;height:80px;object-fit:contain;display:block;border-radius:4px;">';
+    h+='<button type="button" onclick="document.getElementById(\''+canvasId+'_prev\').style.display=\'none\';document.getElementById(\''+canvasId+'_pad\').style.display=\'block\';" style="margin-top:4px;background:transparent;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 10px;border-radius:5px;cursor:pointer;font-family:\'DM Sans\',sans-serif;">Re-sign</button>';
+    h+='<div id="'+canvasId+'_pad" style="display:none;">';
+  } else {
+    h+='<div id="'+canvasId+'_pad">';
+  }
+  h+='<canvas id="'+canvasId+'" width="360" height="80" style="width:100%;max-width:360px;height:80px;background:rgba(0,0,0,.3);border-radius:6px;cursor:crosshair;display:block;touch-action:none;"></canvas>';
+  h+='<button type="button" onclick="clearSig(\''+canvasId+'\')" style="margin-top:4px;background:transparent;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 10px;border-radius:5px;cursor:pointer;font-family:\'DM Sans\',sans-serif;">Clear</button>';
+  h+='</div></div>';
+  return h;
+}
+
 // ===== INVOICE DISCOUNTING =====
 var _invEditId=null;
-function invCalc(amt,months){var svc=Math.round(amt*0.085*100)/100,disb=Math.round(amt*0.80*100)/100,schedule=[],bal=amt*(1.05);for(var m=1;m<=months;m++){var due=m===1?Math.round(amt*1.05*100)/100:Math.round(bal*1.05*100)/100;schedule.push({month:m,amountDue:due});bal=due;}return {svc:svc,disb:disb,schedule:schedule};}
+function invCalc(amt,months){
+  var svc=Math.round(amt*0.085*100)/100;
+  var adv=Math.round(amt*0.80*100)/100;
+  var net=Math.round((adv-svc)*100)/100;
+  var schedule=[],bal=amt;
+  for(var m=1;m<=months;m++){bal=Math.round(bal*1.05*100)/100;schedule.push({month:m,amountDue:bal});}
+  return {svc:svc,disb:adv,net:net,schedule:schedule};
+}
 function invStatus(l){if(l.status==='cleared')return 'cleared';if(l.status==='cancelled')return 'cancelled';var today=td_();for(var i=0;i<(l.months||[]).length;i++){var m=l.months[i];if(!(m.amountPaid>=(m.amountDue-1))&&m.dueDate&&today>m.dueDate)return 'overdue';}return 'active';}
 function invBalance(l){var t=0;for(var i=0;i<(l.months||[]).length;i++)t+=Math.max(0,l.months[i].amountDue-(l.months[i].amountPaid||0));return t;}
+function deleteInv(id){if(!confirm('Permanently delete this invoice loan?'))return;invoiceLoans=invoiceLoans.filter(function(x){return x.id!==id;});if(_fbReady&&_db)_db.collection('salty-corporate').doc('inv').collection('inv').doc(id).delete().catch(function(e){console.warn(e);});logAct('Deleted invoice loan '+id);save();toast('Invoice loan deleted.');renderInvoiceLoans(document.getElementById('mainct'));}
 function renderInvoiceLoans(mc){
   var fs=window._invFilter||'all';
   var stats={active:0,overdue:0,cleared:0,out:0};
@@ -686,42 +1171,296 @@ function renderInvoiceLoans(mc){
   h+='</div>';
   var list=invoiceLoans.filter(function(l){var s=invStatus(l);return fs==='all'||s===fs;}).sort(function(a,b){return b.dateGiven>a.dateGiven?1:-1;});
   if(!list.length){h+='<div class="cd"><div class="es"><div class="ei">📄</div><div class="et">No invoice discounting loans</div></div></div>';}
-  else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Company</th><th>Director</th><th>Invoice Amt</th><th>Disbursed (80%)</th><th>Term</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';
-  list.forEach(function(l){var s=invStatus(l),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.companyName)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(l.directorName||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td>'+l.termMonths+' mo</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="invView(\''+l.id+'\')">👁 View</button>'+(canManage()&&s!=='cleared'&&s!=='cancelled'?'<button class="ab" onclick="openInvModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+(canDo('admin')?'<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;" onclick="deleteInv(\''+l.id+'\')">🗑</button>':'')+'</td></tr>';});
-  h+='</tbody></table></div></div>';}
+  else{
+    h+='<div class="cd"><div class="tw"><table><thead><tr><th>Company</th><th>Director</th><th>Invoice No</th><th>Invoice Amt</th><th>Net to Client</th><th>Term</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';
+    list.forEach(function(l){var s=invStatus(l),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';
+      h+='<tr><td><strong>'+esc(l.companyName)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(l.directorName||'')+'</td><td style="font-size:11px;color:var(--muted);">'+esc(l.invoiceNumber||'—')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(l.netAmount||l.disbursedAmount)+'</td><td>'+l.termMonths+' mo</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td>';
+      h+='<td style="white-space:nowrap;"><button class="ab" onclick="invView(\''+l.id+'\')">👁 View</button>';
+      if(canManage()&&s!=='cleared'&&s!=='cancelled')h+='<button class="ab" onclick="openInvModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>';
+      if(canDo('admin'))h+='<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;" onclick="deleteInv(\''+l.id+'\')">🗑</button>';
+      h+='</td></tr>';
+    });
+    h+='</tbody></table></div></div>';
+  }
   mc.innerHTML=h;
 }
+function invToggleCollateral(){
+  var ct=document.getElementById('inv_coltype').value;
+  document.getElementById('inv_landed').style.display=(ct==='landed'||ct==='both')?'block':'none';
+  document.getElementById('inv_vehicle').style.display=(ct==='vehicle'||ct==='both')?'block':'none';
+}
 function openInvModal(editId){
-  _invEditId=editId||null;var l=editId?invoiceLoans.filter(function(x){return x.id===editId;})[0]:null;
+  _invEditId=editId||null;
+  var l=editId?invoiceLoans.filter(function(x){return x.id===editId;})[0]:null;
   var e=document.getElementById('invmod');if(e)e.remove();
-  var h='<div class="mo op" id="invmod"><div class="md mlg" style="margin-top:10px;"><div class="mtt">📄 '+(l?'Edit':'New')+' Invoice Discounting</div>';
-  h+='<div class="fsec"><div class="fst">Company Information</div><div class="fr3">';
+  var ct=l?l.collateralType||'vehicle':'vehicle';
+  var lp=l?l.landedProp||{}:{};
+  var mv=l?l.motorVehicle||{}:{};
+  var co=l?l.consent||{}:{};
+  var h='<div class="mo op" id="invmod"><div class="md mlg" style="margin-top:10px;max-width:880px;">';
+  h+='<div class="mtt">📄 '+(l?'Edit':'New')+' Invoice Assignment Agreement</div>';
+  // ── Company Info ──
+  h+='<div class="fsec"><div class="fst">Assignor — Company Information</div><div class="fr3">';
   h+='<div class="fg"><label class="fl">Company Name *</label><input class="fi" id="inv_co" value="'+esc(l?l.companyName:'')+'"></div>';
-  h+='<div class="fg"><label class="fl">Director Name(s) *</label><input class="fi" id="inv_dir" value="'+esc(l?l.directorName:'')+'"></div>';
-  h+='<div class="fg"><label class="fl">Contact *</label><input class="fi" id="inv_contact" value="'+esc(l?l.contact:'')+'"></div>';
-  h+='</div><div class="fg"><label class="fl">Location *</label><input class="fi" id="inv_loc" value="'+esc(l?l.location:'')+'"></div></div>';
-  h+='<div class="fsec"><div class="fst">Invoice Details</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Director / Authorised Signatory *</label><input class="fi" id="inv_dir" value="'+esc(l?l.directorName:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Contact / Phone *</label><input class="fi" id="inv_contact" value="'+esc(l?l.contact:'')+'"></div>';
+  h+='</div><div class="fg"><label class="fl">Registered Office / Location *</label><input class="fi" id="inv_loc" value="'+esc(l?l.location:'')+'"></div></div>';
+  // ── Invoice Schedule A ──
+  h+='<div class="fsec"><div class="fst">Invoice Details — Schedule A</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Invoice Number *</label><input class="fi" id="inv_invno" value="'+esc(l?l.invoiceNumber||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Invoice Date *</label><input class="fi" type="date" id="inv_invdate" value="'+esc(l?l.invoiceDate||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Debtor (Customer) *</label><input class="fi" id="inv_debtor" value="'+esc(l?l.debtor||'':'')+'"></div>';
+  h+='</div><div class="fr3">';
   h+='<div class="fg"><label class="fl">Invoice Amount (ZMW) *</label><input class="fi" type="number" id="inv_amt" value="'+(l?l.amountGiven:'')+'" oninput="invCalcModal()"></div>';
-  h+='<div class="fg"><label class="fl">Term (Months, max 3) *</label><select class="fsel" id="inv_mo" onchange="invCalcModal()">';
-  for(var m=1;m<=3;m++)h+='<option value="'+m+'"'+(l&&l.termMonths===m?' selected':'')+'>'+m+' Month'+(m>1?'s':'')+'</option>';
-  h+='</select></div>';
-  h+='<div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="inv_date" value="'+(l?l.dateGiven:td_())+'" onchange="invCalcModal()"></div>';
+  h+='<div class="fg"><label class="fl">Account Number</label><input class="fi" id="inv_accno" value="'+esc(l?l.accountNumber||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Term (Months, max 3) *</label><select class="fsel" id="inv_mo" onchange="invCalcModal()"><option value="1"'+(l&&l.termMonths===1?' selected':'')+'>1 Month</option><option value="2"'+(l&&l.termMonths===2?' selected':'')+'>2 Months</option><option value="3"'+(l&&l.termMonths===3?' selected':'')+'>3 Months</option></select></div>';
+  h+='</div><div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="inv_date" value="'+(l?l.dateGiven:td_())+'" onchange="invCalcModal()"></div>';
+  h+='</div>';
+  h+='<div class="cb" id="inv_sum"><div style="font-size:12px;color:var(--muted);">Fill in invoice amount to see calculation</div></div>';
+  h+='<div class="fsec"><div class="fst">Collateral (Security)</div>';
+  h+='<div class="fg"><label class="fl">Collateral Type *</label><select class="fsel" id="inv_coltype" onchange="invToggleCollateral()"><option value="vehicle"'+(ct==="vehicle"?" selected":"")+'>Motor Vehicle</option><option value="landed"'+(ct==="landed"?" selected":"")+'>Landed Property</option><option value="both"'+(ct==="both"?" selected":"")+'>Both</option></select></div>';
+  h+='<div id="inv_landed" style="display:'+(ct==='vehicle'?'none':'block')+';"><div style="background:rgba(201,168,76,.05);border:1px solid rgba(201,168,76,.1);border-radius:8px;padding:12px;margin-bottom:10px;"><div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Landed Property</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Address / Location</label><input class="fi" id="inv_lp_addr" value="'+esc(lp.address||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Title / Deed Number</label><input class="fi" id="inv_lp_title" value="'+esc(lp.titleNumber||'')+'"></div>';
+  h+='</div></div></div>';
+  h+='<div id="inv_vehicle" style="display:'+(ct==='landed'?'none':'block')+';"><div style="background:rgba(41,128,185,.05);border:1px solid rgba(41,128,185,.1);border-radius:8px;padding:12px;margin-bottom:10px;"><div style="font-size:11px;font-weight:700;color:var(--blue2);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Motor Vehicle</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Registration Number</label><input class="fi" id="inv_mv_reg" value="'+esc(mv.regNumber||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Chassis Number</label><input class="fi" id="inv_mv_chassis" value="'+esc(mv.chassisNumber||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Engine Number</label><input class="fi" id="inv_mv_engine" value="'+esc(mv.engineNumber||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Make</label><input class="fi" id="inv_mv_make" value="'+esc(mv.make||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Model</label><input class="fi" id="inv_mv_model" value="'+esc(mv.model||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Color</label><input class="fi" id="inv_mv_color" value="'+esc(mv.color||'')+'"></div>';
+  h+='</div></div></div></div>';
+  h+='<div class="fsec"><div class="fst">📝 Consent Form</div>';
+  h+='<div style="background:rgba(30,132,73,.05);border:1px solid rgba(30,132,73,.15);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--muted);line-height:2;">';
+  h+='I, <input class="fi" id="inv_con_name" placeholder="Full name of applicant *" value="'+esc(co.fullName||(l?l.directorName||'':''))+'" style="display:inline;width:220px;padding:4px 10px;margin:0 4px;font-size:12px;"> a resident at ';
+  h+='<input class="fi" id="inv_con_addr" placeholder="Resident address *" value="'+esc(co.residentAddress||(l?l.location||'':''))+'" style="display:inline;width:280px;padding:4px 10px;margin:0 4px;font-size:12px;"> do hereby apply for a loan from SALTY ENTERPRISES.</div>';
+  h+='<div class="fr3">';
+  h+='<div class="fg"><label class="fl">Repayment Date *</label><input class="fi" type="date" id="inv_con_repdate" value="'+esc(co.repaymentDate||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Zanaco Account Number</label><input class="fi" id="inv_con_bank" placeholder="Account number for deposits" value="'+esc(co.bankAccount||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="inv_notes" value="'+esc(l?l.notes||'':'')+'"></div>';
   h+='</div></div>';
-  h+='<div class="cb" id="inv_sum"><div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div></div>';
-  h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="inv_notes" value="'+esc(l?l.notes:'')+'"></div>';
-  h+='<div class="mft"><button class="btn bto" onclick="closeInvModal()">Cancel</button><button class="btn btg" onclick="saveInv()">📄 '+(l?'Update':'Issue')+'</button></div>';
+  h+='<div class="fsec"><div class="fst">✍️ Signatures</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Client / Applicant Signature</label>'+_sigCanvas('inv_sig_client',l?l.clientSig||null:null)+'</div>';
+  h+='<div class="fg"><label class="fl">Salty Enterprises Rep Signature</label>'+_sigCanvas('inv_sig_rep',l?l.repSig||null:null)+'</div>';
   h+='</div></div>';
-  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);invCalcModal();
+  h+='<div class="mft"><button class="btn bto" onclick="closeInvModal()">Cancel</button><button class="btn btg" onclick="saveInv()">📄 '+(l?'Update Agreement':'Save & Issue')+'</button></div>';
+  h+='</div></div>';
+  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);
+  invCalcModal();
+  initSigPad('inv_sig_client');
+  initSigPad('inv_sig_rep');
+  // Populate term select
+  var sel=document.getElementById('inv_mo');if(sel&&l){for(var i=0;i<sel.options.length;i++)if(parseInt(sel.options[i].value)===l.termMonths)sel.selectedIndex=i;}
 }
 function closeInvModal(){var m=document.getElementById('invmod');if(m)m.remove();}
-function invCalcModal(){var amt=parseFloat(document.getElementById('inv_amt')&&document.getElementById('inv_amt').value)||0,mo=parseInt(document.getElementById('inv_mo')&&document.getElementById('inv_mo').value)||1,date=document.getElementById('inv_date')&&document.getElementById('inv_date').value,sum=document.getElementById('inv_sum');if(!sum)return;if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div>';return;}var c=invCalc(amt,mo);var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Invoice Amount</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Service Charge (8.5%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svc)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Disbursed (80%)</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.disb)+'</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;">';c.schedule.forEach(function(s){var dd=date?ltMonthDate(date,s.month):'—';h+='<div style="background:rgba(108,52,131,.1);border:1px solid rgba(108,52,131,.2);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:10px;color:var(--muted);">Month '+s.month+'</div><div style="font-size:15px;font-weight:700;color:var(--purple2);">'+zmw(s.amountDue)+'</div><div style="font-size:9px;color:var(--muted);">Due: '+fmtD(dd)+'</div></div>';});h+='</div>';sum.innerHTML=h;}
-function saveInv(){var co=(document.getElementById('inv_co').value||'').trim(),dir=(document.getElementById('inv_dir').value||'').trim(),contact=(document.getElementById('inv_contact').value||'').trim(),loc=(document.getElementById('inv_loc').value||'').trim(),amt=parseFloat(document.getElementById('inv_amt').value)||0,mo=parseInt(document.getElementById('inv_mo').value)||1,date=document.getElementById('inv_date').value;if(!co||!dir||!contact||!loc||!amt||!date){toast('Please fill all required fields.');return;}var c=invCalc(amt,mo);var pmts=[];for(var m=0;m<mo;m++)pmts.push({month:m+1,dueDate:ltMonthDate(date,m+1),amountDue:c.schedule[m].amountDue,amountPaid:0,datePaid:null});if(_invEditId){var l=invoiceLoans.filter(function(x){return x.id===_invEditId;})[0];if(l){l.companyName=co;l.directorName=dir;l.contact=contact;l.location=loc;l.amountGiven=amt;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svc;l.disbursedAmount=c.disb;l.notes=(document.getElementById('inv_notes').value||'').trim();if(l.months.length!==mo)l.months=pmts;}var _invUp=invoiceLoans.filter(function(x){return x.id===_invEditId;})[0];if(_invUp)_markDirty('inv',_invEditId);logAct('Updated invoice — '+co);}else if(canDirectCreate()){var _newInv={id:'INV-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,amountGiven:amt,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,months:pmts,status:'active',notes:(document.getElementById('inv_notes').value||'').trim(),createdBy:cu.display,createdAt:now_()};invoiceLoans.push(_newInv);_markDirty('inv',_newInv.id);logAct('Invoice — '+co+' — '+zmw(amt));}save();closeInvModal();toast('Invoice loan saved!');renderInvoiceLoans(document.getElementById('mainct'));}
-function invView(id){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var st=invStatus(l),mc=document.getElementById('mainct');var h='<button class="bk" onclick="renderInvoiceLoans(document.getElementById(\'mainct\'))">← Back</button><div style="background:linear-gradient(135deg,#0d0d2e,#1a1a5c);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;"><div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">INVOICE DISCOUNTING · '+esc(l.id)+'</div><div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.companyName)+'</div><div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.directorName)+' · '+esc(l.contact)+'</div></div>';h+='<div class="sg"><div class="sc"><div class="sl">Invoice Amount</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div><div class="sc"><div class="sl">Disbursed (80%)</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Term</div><div class="sv">'+l.termMonths+' month'+(l.termMonths>1?'s':'')+'</div></div></div>';var today=td_();h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Monthly Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Balance</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';(l.months||[]).forEach(function(p,i){var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending',bal=Math.max(0,p.amountDue-(p.amountPaid||0));h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-family:monospace;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>'+(canManage()?'<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="invRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="invUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>':'')+'</tr>';});h+='</tbody></table></div></div>';mc.innerHTML=h;}
+function invCalcModal(){
+  var amt=parseFloat(document.getElementById('inv_amt')&&document.getElementById('inv_amt').value)||0;
+  var mo=parseInt(document.getElementById('inv_mo')&&document.getElementById('inv_mo').value)||1;
+  var date=document.getElementById('inv_date')&&document.getElementById('inv_date').value;
+  var sum=document.getElementById('inv_sum');if(!sum)return;
+  if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in invoice amount to see calculation</div>';return;}
+  var c=invCalc(amt,mo);
+  var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;">';
+  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Invoice Amount</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div>';
+  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Advance (80%)</div><div style="font-size:18px;font-weight:700;color:var(--blue2);">'+zmw(c.disb)+'</div></div>';
+  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Service Charge (8.5%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svc)+'</div></div>';
+  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Net to Client</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.net)+'</div></div>';
+  h+='</div><div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  c.schedule.forEach(function(s){
+    var dd=date?ltMonthDate(date,s.month):'—';
+    h+='<div style="background:rgba(108,52,131,.1);border:1px solid rgba(108,52,131,.2);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:10px;color:var(--muted);">Month '+s.month+'</div><div style="font-size:15px;font-weight:700;color:var(--purple2);">'+zmw(s.amountDue)+'</div><div style="font-size:9px;color:var(--muted);">Due: '+fmtD(dd)+'</div></div>';
+  });
+  h+='</div>';
+  sum.innerHTML=h;
+}
+function saveInv(){
+  var co=(document.getElementById('inv_co').value||'').trim();
+  var dir=(document.getElementById('inv_dir').value||'').trim();
+  var contact=(document.getElementById('inv_contact').value||'').trim();
+  var loc=(document.getElementById('inv_loc').value||'').trim();
+  var invno=(document.getElementById('inv_invno').value||'').trim();
+  var invdate=document.getElementById('inv_invdate').value;
+  var debtor=(document.getElementById('inv_debtor').value||'').trim();
+  var amt=parseFloat(document.getElementById('inv_amt').value)||0;
+  var accno=(document.getElementById('inv_accno').value||'').trim();
+  var mo=parseInt(document.getElementById('inv_mo').value)||1;
+  var date=document.getElementById('inv_date').value;
+  var coltype=document.getElementById('inv_coltype').value;
+  var conName=(document.getElementById('inv_con_name').value||'').trim();
+  var conAddr=(document.getElementById('inv_con_addr').value||'').trim();
+  var conRepDate=document.getElementById('inv_con_repdate').value;
+  var conBank=(document.getElementById('inv_con_bank').value||'').trim();
+  var notes=(document.getElementById('inv_notes').value||'').trim();
+  if(!co||!dir||!contact||!loc||!invno||!amt||!date){toast('Please fill all required fields (marked *).');return;}
+  var c=invCalc(amt,mo);
+  var pmts=[];for(var mx=0;mx<mo;mx++)pmts.push({month:mx+1,dueDate:ltMonthDate(date,mx+1),amountDue:c.schedule[mx].amountDue,amountPaid:0,datePaid:null});
+  var lpObj={address:(document.getElementById('inv_lp_addr').value||'').trim(),titleNumber:(document.getElementById('inv_lp_title').value||'').trim()};
+  var mvObj={regNumber:(document.getElementById('inv_mv_reg').value||'').trim(),chassisNumber:(document.getElementById('inv_mv_chassis').value||'').trim(),engineNumber:(document.getElementById('inv_mv_engine').value||'').trim(),make:(document.getElementById('inv_mv_make').value||'').trim(),model:(document.getElementById('inv_mv_model').value||'').trim(),color:(document.getElementById('inv_mv_color').value||'').trim()};
+  var consent={fullName:conName,residentAddress:conAddr,netAmount:c.net,repaymentDate:conRepDate,bankAccount:conBank};
+  var clientSig=getSig('inv_sig_client');
+  var repSig=getSig('inv_sig_rep');
+  if(_invEditId){
+    var l=invoiceLoans.filter(function(x){return x.id===_invEditId;})[0];
+    if(l){l.companyName=co;l.directorName=dir;l.contact=contact;l.location=loc;l.invoiceNumber=invno;l.invoiceDate=invdate;l.debtor=debtor;l.amountGiven=amt;l.accountNumber=accno;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svc;l.disbursedAmount=c.disb;l.netAmount=c.net;l.collateralType=coltype;l.landedProp=lpObj;l.motorVehicle=mvObj;l.consent=consent;l.notes=notes;if(clientSig)l.clientSig=clientSig;if(repSig)l.repSig=repSig;if(l.months.length!==mo)l.months=pmts;}
+    _markDirty('inv',_invEditId);logAct('Updated invoice — '+co);
+    save();closeInvModal();toast('Invoice agreement updated! ✓');renderInvoiceLoans(document.getElementById('mainct'));
+  } else if(canDirectCreate()){
+    var _newInv={id:'INV-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,invoiceNumber:invno,invoiceDate:invdate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,netAmount:c.net,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,months:pmts,status:'active',notes:notes,createdBy:cu.display,createdAt:now_()};
+    invoiceLoans.push(_newInv);_markDirty('inv',_newInv.id);
+    logAct('Invoice — '+co+' — '+zmw(amt));
+    save();closeInvModal();toast('Invoice loan saved! 📄');renderInvoiceLoans(document.getElementById('mainct'));
+  } else {
+    var appObj={id:'APP-'+Date.now(),type:'invoice',product:'📄 Invoice Discounting',clientName:co,companyName:co,directorName:dir,contact:contact,location:loc,invoiceNumber:invno,invoiceDate:invdate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,amount:amt,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,notes:notes,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
+    corpApplications.push(appObj);_markDirty('meta','');
+    logAct('Submitted invoice application — '+co+' — awaiting admin approval');
+    save();closeInvModal();toast('Application submitted for approval! ✓');buildNav();renderInvoiceLoans(document.getElementById('mainct'));
+  }
+}
+function invView(id){
+  var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
+  var st=invStatus(l),mc=document.getElementById('mainct');
+  var h='<button class="bk" onclick="renderInvoiceLoans(document.getElementById(\'mainct\'))">← Back to Invoice Discounting</button>';
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">';
+  h+='<button class="btn btg" onclick="printInvAgreement(\''+id+'\')" style="padding:10px 20px;">🖨️ Print Agreement + Consent</button>';
+  if(canManage()&&st!=='cleared'&&st!=='cancelled')h+='<button class="btn bto" onclick="openInvModal(\''+id+'\')" style="padding:10px 16px;">✏️ Edit</button>';
+  if(canDo('admin'))h+='<button class="btn btd" onclick="deleteInv(\''+id+'\')" style="padding:10px 16px;">🗑 Delete</button>';
+  h+='</div>';
+  h+='<div style="background:linear-gradient(135deg,#0d0d2e,#1a1a5c);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;">';
+  h+='<div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">INVOICE DISCOUNTING · '+esc(l.id)+'</div>';
+  h+='<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.companyName)+'</div>';
+  h+='<div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.directorName||'')+' · '+esc(l.contact)+' · '+esc(l.location)+'</div>';
+  h+='</div>';
+  h+='<div class="sg"><div class="sc"><div class="sl">Invoice Amount</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div><div class="sc"><div class="sl">Advance (80%)</div><div class="sv" style="font-size:16px;color:var(--blue2);">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Net to Client</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(l.netAmount||l.disbursedAmount)+'</div></div><div class="sc"><div class="sl">Term</div><div class="sv">'+l.termMonths+' month'+(l.termMonths>1?'s':'')+'</div></div><div class="sc"><div class="sl">Status</div><div class="sv" style="color:'+(st==='cleared'?'var(--ok2)':st==='overdue'?'var(--red2)':'var(--blue2)')+';">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue ⚠️':'Active')+'</div></div></div>';
+  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📋 Invoice Details (Schedule A)</span></div><div class="cdb">';
+  h+='<div class="rm"><span class="rml">Invoice Number</span><span class="rmv">'+esc(l.invoiceNumber||'—')+'</span></div>';
+  h+='<div class="rm"><span class="rml">Invoice Date</span><span class="rmv">'+fmtD(l.invoiceDate||'')+'</span></div>';
+  h+='<div class="rm"><span class="rml">Debtor</span><span class="rmv">'+esc(l.debtor||'—')+'</span></div>';
+  h+='<div class="rm"><span class="rml">Account Number</span><span class="rmv">'+esc(l.accountNumber||'—')+'</span></div>';
+  h+='<div class="rm"><span class="rml">Date Given</span><span class="rmv">'+fmtD(l.dateGiven)+'</span></div>';
+  h+='<div class="rm"><span class="rml">Created By</span><span class="rmv">'+esc(l.createdBy||'')+'</span></div>';
+  if(l.notes)h+='<div class="rm"><span class="rml">Notes</span><span class="rmv">'+esc(l.notes)+'</span></div>';
+  h+='</div></div>';
+  if(l.collateralType){
+    h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">🔒 Collateral</span></div><div class="cdb">';
+    h+='<div class="rm"><span class="rml">Type</span><span class="rmv">'+esc(l.collateralType==='landed'?'Landed Property':l.collateralType==='vehicle'?'Motor Vehicle':'Landed Property + Motor Vehicle')+'</span></div>';
+    if((l.collateralType==='landed'||l.collateralType==='both')&&l.landedProp){h+='<div class="rm"><span class="rml">Address</span><span class="rmv">'+esc(l.landedProp.address||'—')+'</span></div><div class="rm"><span class="rml">Title/Deed No</span><span class="rmv">'+esc(l.landedProp.titleNumber||'—')+'</span></div>';}
+    if((l.collateralType==='vehicle'||l.collateralType==='both')&&l.motorVehicle){h+='<div class="rm"><span class="rml">Registration</span><span class="rmv">'+esc(l.motorVehicle.regNumber||'—')+'</span></div><div class="rm"><span class="rml">Chassis No</span><span class="rmv">'+esc(l.motorVehicle.chassisNumber||'—')+'</span></div><div class="rm"><span class="rml">Engine No</span><span class="rmv">'+esc(l.motorVehicle.engineNumber||'—')+'</span></div><div class="rm"><span class="rml">Make / Model / Color</span><span class="rmv">'+esc((l.motorVehicle.make||'')+' '+(l.motorVehicle.model||'')+' ('+(l.motorVehicle.color||'')+')')+'</span></div>';}
+    h+='</div></div>';
+  }
+  if(l.consent){
+    h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📝 Consent Form</span></div><div class="cdb">';
+    h+='<div class="rm"><span class="rml">Applicant Name</span><span class="rmv">'+esc(l.consent.fullName||'—')+'</span></div>';
+    h+='<div class="rm"><span class="rml">Resident Address</span><span class="rmv">'+esc(l.consent.residentAddress||'—')+'</span></div>';
+    h+='<div class="rm"><span class="rml">Net Amount (to receive)</span><span class="rmv" style="font-weight:700;color:var(--gold);">'+zmw(l.consent.netAmount||l.netAmount||l.disbursedAmount)+'</span></div>';
+    h+='<div class="rm"><span class="rml">Repayment Date</span><span class="rmv">'+fmtD(l.consent.repaymentDate||'')+'</span></div>';
+    h+='<div class="rm"><span class="rml">Zanaco Account</span><span class="rmv">'+esc(l.consent.bankAccount||'—')+'</span></div>';
+    h+='</div></div>';
+  }
+  if(l.clientSig||l.repSig){
+    h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">✍️ Signatures on File</span></div><div class="cdb" style="display:flex;gap:30px;flex-wrap:wrap;">';
+    if(l.clientSig)h+='<div><div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Client / Applicant</div><img src="'+l.clientSig+'" style="height:64px;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,.3);"></div>';
+    if(l.repSig)h+='<div><div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Salty Enterprises Rep</div><img src="'+l.repSig+'" style="height:64px;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,.3);"></div>';
+    h+='</div></div>';
+  }
+  var today=td_();
+  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Monthly Repayment Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Balance</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';
+  (l.months||[]).forEach(function(p,i){
+    var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending';
+    var bal=Math.max(0,p.amountDue-(p.amountPaid||0));
+    h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-family:monospace;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>';
+    if(canManage())h+='<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="invRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="invUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div></div>';
+  mc.innerHTML=h;
+}
+function printInvAgreement(id){
+  var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
+  var d=new Date(l.dateGiven+'T00:00:00');
+  var months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var dayN=d.getDate(),monN=months[d.getMonth()],yrN=d.getFullYear();
+  var netAmt=(l.consent&&l.consent.netAmount)||l.netAmount||l.disbursedAmount;
+  var conName=(l.consent&&l.consent.fullName)||l.directorName||'';
+  var conAddr=(l.consent&&l.consent.residentAddress)||l.location||'';
+  var repDate=(l.consent&&l.consent.repaymentDate)?fmtD(l.consent.repaymentDate):'_______________';
+  var bankAcc=(l.consent&&l.consent.bankAccount)||'';
+  var w=window.open('','_blank');
+  var collDesc='';
+  if((l.collateralType==='vehicle'||l.collateralType==='both')&&l.motorVehicle)collDesc=(l.motorVehicle.make||'')+' '+(l.motorVehicle.model||'')+' Reg: '+(l.motorVehicle.regNumber||'');
+  else if((l.collateralType==='landed'||l.collateralType==='both')&&l.landedProp)collDesc=l.landedProp.address||'';
+  else collDesc='...';
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice Agreement — '+esc(l.companyName)+'</title>';
+  html+='<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,Helvetica,sans-serif;font-size:11.5pt;line-height:1.65;color:#000;padding:30px 45px;}';
+  html+='.no-print{margin-bottom:20px;}h1{font-size:15pt;text-align:center;font-weight:bold;margin:0 0 18px;text-transform:uppercase;letter-spacing:1px;}h2{font-size:12pt;font-weight:bold;margin:18px 0 8px;}p{margin:7px 0;}.parties{margin:14px 0;}.sig-row{display:flex;justify-content:space-between;margin-top:30px;gap:20px;}.sig-col{width:47%;}.sig-line{display:inline-block;border-bottom:1px solid #000;min-width:180px;margin-left:4px;}.page-break{page-break-before:always;margin-top:0;}.bold{font-weight:bold;}table{width:100%;border-collapse:collapse;margin:10px 0;}td{padding:6px 8px;border:1px solid #000;}td:first-child{font-weight:bold;width:180px;}ul,ol{margin:6px 0 6px 24px;}li{margin:3px 0;}';
+  html+='@media print{.no-print{display:none!important;}}';
+  html+='</style></head><body>';
+  html+='<div class="no-print"><button onclick="window.print()" style="padding:10px 24px;background:#c9a84c;color:#000;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-right:10px;">🖨️ Print / Save as PDF</button><button onclick="window.close()" style="padding:10px 16px;background:#333;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;">Close</button></div>';
+  html+='<h1>Invoice Assignment Agreement</h1>';
+  html+='<p>This INVOICE ASSIGNMENT AGREEMENT ("Agreement") is made and entered into this <span class="bold">'+dayN+'</span> day of <span class="bold">'+monN+'</span>, <span class="bold">'+yrN+'</span> by and between:</p>';
+  html+='<div class="parties"><p><span class="bold">1. '+esc(l.companyName)+'</span>, a company duly incorporated in accordance with the laws of Zambia, having its registered office at '+esc(l.location)+' (hereinafter referred to as the "Assignor");</p>';
+  html+='<p style="text-align:center;font-weight:bold;margin:12px 0;">AND</p>';
+  html+='<p><span class="bold">2. Salty Enterprises</span>, a company duly incorporated in accordance with the laws of Zambia, having its registered office at House No. 83, Kalungwishi Street, Kitwe (hereinafter referred to as the "Assignee").</p></div>';
+  html+='<h2>WHEREAS:</h2><p>A. The Assignor is entitled to certain payment(s) under one or more invoices issued to its clients (the "Invoice");</p><p>B. The Assignor wishes to assign to the Assignee, and the Assignee agrees to accept such assignment, on the terms set forth in this Agreement.</p>';
+  html+='<p>NOW, THEREFORE, in consideration of the mutual covenants and agreements herein contained, the parties hereby agree as follows:</p>';
+  html+='<h2>1. Assignment of Invoice</h2><p>1.1 The Assignor hereby assigns to the Assignee all rights, title, and interest in and to the invoices listed in Schedule A attached hereto, including the right to collect and receive payments due under such invoice.</p><p>1.2 The Assignee agrees to advance payment to the Assignor based on the value of the invoices, less the agreed fees and charges, subject to the terms of this Agreement.</p>';
+  html+='<h2>2. Fees and Charges</h2><p>2.1 The assignee will charge the assignor:</p><ul><li>8.5% service charge on the total value of each Invoice of the assignor</li><li>A 5% service fee every month</li><li>An additional 5% monthly service fee on any outstanding amount not settled by the borrower within 30 days of the date of assignment.</li></ul><p>2.2 The monthly service fee under clause 2.1 shall accrue for a maximum period of three (3) months, after which additional conditions shall apply, as outlined in clause 3 below.</p>';
+  html+='<h2>3. Warranties and Representations</h2><p>3.1 The Assignor represents and warrants that:</p><ul><li>The invoices are valid and enforceable.</li><li>There are no disputes or claims concerning the invoices.</li><li>The Assignor has full authority to assign the invoices.</li></ul><p>3.2 The Assignee acknowledges that it is accepting the assignment based on the warranties of the Assignor and will have the right to pursue collection independently.</p>';
+  html+='<h2>4. Collateral</h2><p>4.1 This loan is guaranteed by collateral such as a house or a car under comprehensive insurance.</p><p>4.2 <span class="bold">Purpose of Collateral</span></p><p>The collateral provided by the Borrower serves as security for all amounts advanced under this Invoice Finance Agreement, including principal, interest, fees, and any enforcement costs.</p>';
+  var collNum=3;
+  if((l.collateralType==='landed'||l.collateralType==='both')&&l.landedProp){
+    html+='<p><span class="bold">4.'+collNum+' LANDED PROPERTY</span></p>';
+    html+='<p>a. Location: '+(l.landedProp.address||'___________________________')+'</p>';
+    html+='<p>b. Title/Deed Number: '+(l.landedProp.titleNumber||'___________________________')+'</p>';
+    html+='<p>Signature: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:40px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</p>';
+    collNum++;
+  }
+  if((l.collateralType==='vehicle'||l.collateralType==='both')&&l.motorVehicle){
+    html+='<p><span class="bold">4.'+collNum+' MOTOR VEHICLE</span></p>';
+    html+='<p>a. Registration Number: '+(l.motorVehicle.regNumber||'___________________________')+'</p>';
+    html+='<p>b. Chassis Number: '+(l.motorVehicle.chassisNumber||'___________________________')+'</p>';
+    html+='<p>c. Engine Number: '+(l.motorVehicle.engineNumber||'___________________________')+'</p>';
+    html+='<p>d. Make: '+(l.motorVehicle.make||'___________________________')+'</p>';
+    html+='<p>e. Model: '+(l.motorVehicle.model||'___________________________')+'</p>';
+    html+='<p>f. Color: '+(l.motorVehicle.color||'___________________________')+'</p>';
+    html+='<p>g. Signature: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:40px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</p>';
+  }
+  html+='<h2>DEFAULT CLAUSES</h2><p>The borrower shall be deemed to be in default under the agreement if;</p><ol><li>The borrower fails to pay on the assignment date</li><li>The borrower breaches the agreement by becoming non-compliant to the terms and conditions set in this agreement.</li><li>The borrower becomes insolvent or bankrupt.</li><li>The borrower permits the collateral to be disposed of, encumbered, or otherwise impaired without the lender\'s written consent.</li></ol><p>Upon the occurrence of default, the lender will be given 15 working days to pay the entire outstanding and an additional 5% on the outstanding balance and exercise all remedies available under the law and this agreement, failure to which the company will start the process of seizure of the pledged collateral.</p>';
+  html+='<h2>5. Governing Law</h2><p>This Agreement shall be governed by and construed in accordance with the laws of the Republic of Zambia. Any disputes arising hereunder shall be subject to the jurisdiction of the courts of Zambia.</p>';
+  html+='<h2>6. Miscellaneous</h2><p>6.1 This Agreement constitutes the entire agreement between the parties and supersedes all prior discussions or agreements.</p><p>6.2 Any amendments to this Agreement must be made in writing and signed by both parties.</p>';
+  html+='<p>IN WITNESS WHEREOF, the parties have executed this Invoice Assignment Agreement on the date first written above.</p>';
+  html+='<div class="sig-row"><div class="sig-col"><p><span class="bold">SIGNED for and on behalf of (Assignor):</span></p><p>Name: '+esc(l.directorName||'')+' &nbsp; Name: ___________________________</p><p>Designation: ___________________________</p><p>Signature: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:50px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</p><p>Date: '+fmtD(l.dateGiven)+'</p><p>Phone: '+esc(l.contact||'')+'</p></div>';
+  html+='<div class="sig-col"><p><span class="bold">SIGNED for and on behalf of SALTY ENTERPRISES (Assignee):</span></p><p>Name: ___________________________</p><p>Designation: ___________________________</p><p>Signature: '+(l.repSig?'<img src="'+l.repSig+'" style="height:50px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</p><p>Date: '+fmtD(td_())+'</p><p>Phone: ___________________________</p></div></div>';
+  html+='<h2>SCHEDULE 1: Copy of Assigned Invoice</h2>';
+  html+='<table><tr><td>Invoice Number</td><td>'+esc(l.invoiceNumber||'')+'</td></tr><tr><td>Invoice Date</td><td>'+fmtD(l.invoiceDate||'')+'</td></tr><tr><td>Invoice Amount</td><td>'+zmw(l.amountGiven)+'</td></tr><tr><td>Account Number</td><td>'+esc(l.accountNumber||'')+'</td></tr><tr><td>Debtor</td><td>'+esc(l.debtor||'')+'</td></tr></table>';
+  // CONSENT FORM
+  html+='<div class="page-break"></div>';
+  html+='<h1>Consent Form</h1>';
+  html+='<p>I, <span class="bold">'+esc(conName)+'</span> a resident at <span class="bold">'+esc(conAddr)+'</span> do hereby apply for a loan in the sum of <span class="bold">'+zmw(l.amountGiven)+'</span> from SALTY ENTERPRISES. I have pledged <span class="bold">'+esc(collDesc)+'</span> as collateral and I warrant and declare that I have read the standard terms and conditions upon which facility will be rendered to me and I agree to comply with all the necessary requirements for this facility and pay all fees and charges relating to this transaction and that, by signing this consent form, I authorise SALTY ENTERPRISES to collect from my approved loan all the necessary fees and charges and pay the fees and/or my previous loan balance or any charge specified hereunder:</p>';
+  html+='<p>I, <span class="bold">'+esc(conName)+'</span> do hereby confirm and agree that the sum of <span class="bold">'+zmw(netAmt)+'</span> is the net amount I will get after disbursement of the loan. I am requesting that my repayment date be: <span class="bold">'+repDate+'</span></p>';
+  html+='<p><span class="bold">I also undertake that I will promptly make my payment on or before the date I have chosen above by way of bank deposit under Zanaco account number '+(bankAcc?'<span class="bold">'+esc(bankAcc)+'</span>':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</span></p>';
+  html+='<p>I further declare and warrant that the information I have rendered in support of my application, I do hereby confirm that this information is true, correct, and accurate in every respect and I understand that this information is the basis upon which Salty Enterprises has determined to avail the credit facility to me. Therefore, should any of this information be incorrect in any respect, SALTY ENTERPRISES reserve the right to withdrawal its offer of the facility and/or terminate the application process relating to the offer of this facility to me without bearing any legal obligation or consequence. SALTY ENTERPRISES may, where necessary institute legal proceedings against me if the information supplied by me is untrue.</p>';
+  html+='<div style="margin-top:40px;display:flex;align-items:flex-end;gap:50px;flex-wrap:wrap;">';
+  html+='<div>Signed at: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>';
+  html+='<div>Date: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>';
+  html+='<div>Signature of applicant: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:50px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</div>';
+  html+='</div></body></html>';
+  w.document.write(html);w.document.close();
+}
 function invRecordPay(id,i){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' balance: '+zmw(def)+'\nEnter amount:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();var all=true;for(var j=0;j<l.months.length;j++)if(l.months[j].amountPaid<l.months[j].amountDue-1){all=false;break;}if(all)l.status='cleared';_markDirty('inv',l.id);logAct('Invoice pay — '+l.companyName+' M'+p.month+' — '+zmw(amt));save();toast('Payment recorded!');invView(id);}
 function invUndoPay(id,i){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i];if(!confirm('Undo Month '+p.month+'?'))return;p.amountPaid=0;p.datePaid=null;if(l.status==='cleared')l.status='active';_markDirty('inv',l.id);save();toast('Undone.');invView(id);}
+
 // ===== ORDER FINANCING =====
 var _ordEditId=null;
-function ordCalc(amt,months){var svc=Math.round(amt*0.085*100)/100,disb=Math.round(amt*0.70*100)/100,schedule=[],bal=amt*(1.05);for(var m=1;m<=months;m++){var due=m===1?Math.round(amt*1.05*100)/100:Math.round(bal*1.05*100)/100;schedule.push({month:m,amountDue:due});bal=due;}return {svc:svc,disb:disb,schedule:schedule};}
+function ordCalc(amt,months){
+  var svc=Math.round(amt*0.085*100)/100;
+  var adv=Math.round(amt*0.70*100)/100;
+  var net=Math.round((adv-svc)*100)/100;
+  var schedule=[],bal=amt;
+  for(var m=1;m<=months;m++){bal=Math.round(bal*1.05*100)/100;schedule.push({month:m,amountDue:bal});}
+  return {svc:svc,disb:adv,net:net,schedule:schedule};
+}
+function deleteOrd(id){if(!confirm('Permanently delete this order loan?'))return;orderLoans=orderLoans.filter(function(x){return x.id!==id;});if(_fbReady&&_db)_db.collection('salty-corporate').doc('ord').collection('ord').doc(id).delete().catch(function(e){console.warn(e);});logAct('Deleted order loan '+id);save();toast('Order loan deleted.');renderOrderLoans(document.getElementById('mainct'));}
 function renderOrderLoans(mc){
   var fs=window._ordFilter||'all';
   var stats={active:0,overdue:0,cleared:0,out:0};
@@ -736,16 +1475,278 @@ function renderOrderLoans(mc){
   h+='</div>';
   var list=orderLoans.filter(function(l){var s=invStatus({status:l.status,months:l.months});return fs==='all'||s===fs;}).sort(function(a,b){return b.dateGiven>a.dateGiven?1:-1;});
   if(!list.length){h+='<div class="cd"><div class="es"><div class="ei">📦</div><div class="et">No order financing loans</div></div></div>';}
-  else{h+='<div class="cd"><div class="tw"><table><thead><tr><th>Company</th><th>Contact</th><th>Order Amount</th><th>Disbursed (70%)</th><th>Term</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';list.forEach(function(l){var s=invStatus({status:l.status,months:l.months}),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';h+='<tr><td><strong>'+esc(l.companyName)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(l.contact||'')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(l.disbursedAmount)+'</td><td>'+l.termMonths+' mo</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td><td><button class="ab" onclick="ordView(\''+l.id+'\')">👁 View</button>'+(canManage()&&s!=='cleared'&&s!=='cancelled'?'<button class="ab" onclick="openOrdModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>':'')+(canDo('admin')?'<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;" onclick="deleteOrd(\''+l.id+'\')">🗑</button>':'')+'</td></tr>';});h+='</tbody></table></div></div>';}
+  else{
+    h+='<div class="cd"><div class="tw"><table><thead><tr><th>Company</th><th>Contact</th><th>Order No</th><th>Order Amount</th><th>Net to Client</th><th>Term</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>';
+    list.forEach(function(l){var s=invStatus({status:l.status,months:l.months}),sc=s==='active'?'bgg':s==='overdue'?'bgr':s==='cleared'?'bgb':'bgx';
+      h+='<tr><td><strong>'+esc(l.companyName)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(l.contact||'')+'</td><td style="font-size:11px;color:var(--muted);">'+esc(l.orderNumber||'—')+'</td><td style="font-family:monospace;font-weight:700;">'+zmw(l.amountGiven)+'</td><td style="font-family:monospace;">'+zmw(l.netAmount||l.disbursedAmount)+'</td><td>'+l.termMonths+' mo</td><td style="font-size:12px;">'+fmtD(l.dateGiven)+'</td><td><span class="bg '+sc+'">'+(s==='cleared'?'Cleared ✓':s==='overdue'?'Overdue':s==='active'?'Active':'Cancelled')+'</span></td>';
+      h+='<td style="white-space:nowrap;"><button class="ab" onclick="ordView(\''+l.id+'\')">👁 View</button>';
+      if(canManage()&&s!=='cleared'&&s!=='cancelled')h+='<button class="ab" onclick="openOrdModal(\''+l.id+'\')" style="margin-top:2px;display:block;">✏️</button>';
+      if(canDo('admin'))h+='<button class="ab" style="color:var(--red2);border-color:var(--red2);margin-top:2px;display:block;" onclick="deleteOrd(\''+l.id+'\')">🗑</button>';
+      h+='</td></tr>';
+    });
+    h+='</tbody></table></div></div>';
+  }
   mc.innerHTML=h;
 }
-function openOrdModal(editId){_ordEditId=editId||null;var l=editId?orderLoans.filter(function(x){return x.id===editId;})[0]:null;var e=document.getElementById('ordmod');if(e)e.remove();var h='<div class="mo op" id="ordmod"><div class="md mlg" style="margin-top:10px;"><div class="mtt">📦 '+(l?'Edit':'New')+' Order Financing</div><div class="fsec"><div class="fst">Company Information</div><div class="fr3"><div class="fg"><label class="fl">Company Name *</label><input class="fi" id="ord_co" value="'+esc(l?l.companyName:'')+'"></div><div class="fg"><label class="fl">Contact *</label><input class="fi" id="ord_contact" value="'+esc(l?l.contact:'')+'"></div><div class="fg"><label class="fl">Location *</label><input class="fi" id="ord_loc" value="'+esc(l?l.location:'')+'"></div></div></div><div class="fsec"><div class="fst">Loan Details</div><div class="fr3"><div class="fg"><label class="fl">Order Amount (ZMW) *</label><input class="fi" type="number" id="ord_amt" value="'+(l?l.amountGiven:'')+'" oninput="ordCalcModal()"></div><div class="fg"><label class="fl">Term (max 3 months) *</label><select class="fsel" id="ord_mo" onchange="ordCalcModal()">';for(var m=1;m<=3;m++)h+='<option value="'+m+'"'+(l&&l.termMonths===m?' selected':'')+'>'+m+' Month'+(m>1?'s':'')+'</option>';h+='</select></div><div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="ord_date" value="'+(l?l.dateGiven:td_())+'" onchange="ordCalcModal()"></div></div></div><div class="cb" id="ord_sum"><div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div></div><div class="fg"><label class="fl">Notes</label><input class="fi" id="ord_notes" value="'+esc(l?l.notes:'')+'"></div><div class="mft"><button class="btn bto" onclick="closeOrdModal()">Cancel</button><button class="btn btg" onclick="saveOrd()">📦 '+(l?'Update':'Issue')+'</button></div></div></div>';var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);ordCalcModal();}
+function ordToggleCollateral(){
+  var ct=document.getElementById('ord_coltype').value;
+  document.getElementById('ord_landed').style.display=(ct==='landed'||ct==='both')?'block':'none';
+  document.getElementById('ord_vehicle').style.display=(ct==='vehicle'||ct==='both')?'block':'none';
+}
+function openOrdModal(editId){
+  _ordEditId=editId||null;
+  var l=editId?orderLoans.filter(function(x){return x.id===editId;})[0]:null;
+  var e=document.getElementById('ordmod');if(e)e.remove();
+  var ct=l?l.collateralType||'vehicle':'vehicle';
+  var lp=l?l.landedProp||{}:{};
+  var mv=l?l.motorVehicle||{}:{};
+  var co=l?l.consent||{}:{};
+  var h='<div class="mo op" id="ordmod"><div class="md mlg" style="margin-top:10px;max-width:880px;">';
+  h+='<div class="mtt">📦 '+(l?'Edit':'New')+' Order Assignment Agreement</div>';
+  h+='<div class="fsec"><div class="fst">Assignor — Company Information</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Company Name *</label><input class="fi" id="ord_co" value="'+esc(l?l.companyName:'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Director / Authorised Signatory *</label><input class="fi" id="ord_dir" value="'+esc(l?l.directorName||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Contact / Phone *</label><input class="fi" id="ord_contact" value="'+esc(l?l.contact:'')+'"></div>';
+  h+='</div><div class="fg"><label class="fl">Registered Office / Location *</label><input class="fi" id="ord_loc" value="'+esc(l?l.location:'')+'"></div></div>';
+  h+='<div class="fsec"><div class="fst">Order Details — Schedule A</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Order Number *</label><input class="fi" id="ord_ordno" value="'+esc(l?l.orderNumber||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Order Date *</label><input class="fi" type="date" id="ord_orddate" value="'+esc(l?l.orderDate||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Debtor (Customer) *</label><input class="fi" id="ord_debtor" value="'+esc(l?l.debtor||'':'')+'"></div>';
+  h+='</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Order Amount (ZMW) *</label><input class="fi" type="number" id="ord_amt" value="'+(l?l.amountGiven:'')+'" oninput="ordCalcModal()"></div>';
+  h+='<div class="fg"><label class="fl">Account Number</label><input class="fi" id="ord_accno" value="'+esc(l?l.accountNumber||'':'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Term (Months, max 3) *</label><select class="fsel" id="ord_mo" onchange="ordCalcModal()"><option value="1"'+(l&&l.termMonths===1?' selected':'')+'>1 Month</option><option value="2"'+(l&&l.termMonths===2?' selected':'')+'>2 Months</option><option value="3"'+(l&&l.termMonths===3?' selected':'')+'>3 Months</option></select></div>';
+  h+='</div><div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="ord_date" value="'+(l?l.dateGiven:td_())+'" onchange="ordCalcModal()"></div></div>';
+  h+='<div class="cb" id="ord_sum"><div style="font-size:12px;color:var(--muted);">Fill in order amount to see calculation</div></div>';
+  h+='<div class="fsec"><div class="fst">Collateral (Security)</div>';
+  h+='<div class="fg"><label class="fl">Collateral Type *</label><select class="fsel" id="ord_coltype" onchange="ordToggleCollateral()"><option value="vehicle"'+(ct==='vehicle'?' selected':'')+'>Motor Vehicle</option><option value="landed"'+(ct==='landed'?' selected':'')+'>Landed Property</option><option value="both"'+(ct==='both'?' selected':'')+'>Both</option></select></div>';
+  h+='<div id="ord_landed" style="display:'+(ct==='vehicle'?'none':'block')+';"><div style="background:rgba(201,168,76,.05);border:1px solid rgba(201,168,76,.1);border-radius:8px;padding:12px;margin-bottom:10px;"><div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Landed Property</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Address</label><input class="fi" id="ord_lp_addr" value="'+esc(lp.address||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Title Number</label><input class="fi" id="ord_lp_title" value="'+esc(lp.titleNumber||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Size</label><input class="fi" id="ord_lp_size" value="'+esc(lp.size||'')+'"></div>';
+  h+='</div></div></div>';
+  h+='<div id="ord_vehicle" style="display:'+(ct==='landed'?'none':'block')+';"><div style="background:rgba(41,128,185,.05);border:1px solid rgba(41,128,185,.1);border-radius:8px;padding:12px;margin-bottom:10px;"><div style="font-size:11px;font-weight:700;color:var(--blue2);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Motor Vehicle</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Registration Number</label><input class="fi" id="ord_mv_reg" value="'+esc(mv.regNumber||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Chassis Number</label><input class="fi" id="ord_mv_chassis" value="'+esc(mv.chassisNumber||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Engine Number</label><input class="fi" id="ord_mv_engine" value="'+esc(mv.engineNumber||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Make</label><input class="fi" id="ord_mv_make" value="'+esc(mv.make||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Model</label><input class="fi" id="ord_mv_model" value="'+esc(mv.model||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Color</label><input class="fi" id="ord_mv_color" value="'+esc(mv.color||'')+'"></div>';
+  h+='</div></div></div></div>';
+  h+='<div class="fsec"><div class="fst">📝 Consent Form</div>';
+  h+='<div style="background:rgba(30,132,73,.05);border:1px solid rgba(30,132,73,.15);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--muted);line-height:2;">';
+  h+='I, <input class="fi" id="ord_con_name" placeholder="Full name of applicant *" value="'+esc(co.fullName||(l?l.directorName||'':''))+'" style="display:inline;width:220px;padding:4px 10px;margin:0 4px;font-size:12px;"> a resident at ';
+  h+='<input class="fi" id="ord_con_addr" placeholder="Resident address *" value="'+esc(co.residentAddress||(l?l.location||'':''))+'" style="display:inline;width:280px;padding:4px 10px;margin:0 4px;font-size:12px;"> do hereby apply for a loan from SALTY ENTERPRISES.</div>';
+  h+='<div class="fr3">';
+  h+='<div class="fg"><label class="fl">Repayment Date *</label><input class="fi" type="date" id="ord_con_repdate" value="'+esc(co.repaymentDate||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Zanaco Account Number</label><input class="fi" id="ord_con_bank" placeholder="Account number for deposits" value="'+esc(co.bankAccount||'')+'"></div>';
+  h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="ord_notes" value="'+esc(l?l.notes||'':'')+'"></div>';
+  h+='</div></div>';
+  h+='<div class="fsec"><div class="fst">✍️ Signatures</div><div class="fr3">';
+  h+='<div class="fg"><label class="fl">Client / Applicant Signature</label>'+_sigCanvas('ord_sig_client',l?l.clientSig||null:null)+'</div>';
+  h+='<div class="fg"><label class="fl">Salty Enterprises Rep Signature</label>'+_sigCanvas('ord_sig_rep',l?l.repSig||null:null)+'</div>';
+  h+='</div></div>';
+  h+='<div class="mft"><button class="btn bto" onclick="closeOrdModal()">Cancel</button><button class="btn btg" onclick="saveOrd()">📦 '+(l?'Update Agreement':'Save & Issue')+'</button></div>';
+  h+='</div></div>';
+  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);
+  ordCalcModal();
+  initSigPad('ord_sig_client');
+  initSigPad('ord_sig_rep');
+}
 function closeOrdModal(){var m=document.getElementById('ordmod');if(m)m.remove();}
-function ordCalcModal(){var amt=parseFloat(document.getElementById('ord_amt')&&document.getElementById('ord_amt').value)||0,mo=parseInt(document.getElementById('ord_mo')&&document.getElementById('ord_mo').value)||1,date=document.getElementById('ord_date')&&document.getElementById('ord_date').value,sum=document.getElementById('ord_sum');if(!sum)return;if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in amount to see calculation</div>';return;}var c=ordCalc(amt,mo);var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Order Amount</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Service Charge (8.5%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svc)+'</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Disbursed (70%)</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.disb)+'</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;">';c.schedule.forEach(function(s){var dd=date?ltMonthDate(date,s.month):'—';h+='<div style="background:rgba(142,68,173,.1);border:1px solid rgba(142,68,173,.2);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:10px;color:var(--muted);">Month '+s.month+'</div><div style="font-size:15px;font-weight:700;color:#9b59b6;">'+zmw(s.amountDue)+'</div><div style="font-size:9px;color:var(--muted);">Due: '+fmtD(dd)+'</div></div>';});h+='</div>';sum.innerHTML=h;}
-function saveOrd(){var co=(document.getElementById('ord_co').value||'').trim(),contact=(document.getElementById('ord_contact').value||'').trim(),loc=(document.getElementById('ord_loc').value||'').trim(),amt=parseFloat(document.getElementById('ord_amt').value)||0,mo=parseInt(document.getElementById('ord_mo').value)||1,date=document.getElementById('ord_date').value;if(!co||!contact||!loc||!amt||!date){toast('Please fill all required fields.');return;}var c=ordCalc(amt,mo);var pmts=[];for(var m=0;m<mo;m++)pmts.push({month:m+1,dueDate:ltMonthDate(date,m+1),amountDue:c.schedule[m].amountDue,amountPaid:0,datePaid:null});if(_ordEditId){var l=orderLoans.filter(function(x){return x.id===_ordEditId;})[0];if(l){l.companyName=co;l.contact=contact;l.location=loc;l.amountGiven=amt;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svc;l.disbursedAmount=c.disb;l.notes=(document.getElementById('ord_notes').value||'').trim();if(l.months.length!==mo)l.months=pmts;}var _ordUp=orderLoans.filter(function(x){return x.id===_ordEditId;})[0];if(_ordUp)_markDirty('ord',_ordEditId);logAct('Updated order — '+co);}else if(canDirectCreate()){var _newOrd={id:'ORD-'+Date.now(),companyName:co,contact:contact,location:loc,amountGiven:amt,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,months:pmts,status:'active',notes:(document.getElementById('ord_notes').value||'').trim(),createdBy:cu.display,createdAt:now_()};orderLoans.push(_newOrd);_markDirty('ord',_newOrd.id);logAct('Order — '+co+' — '+zmw(amt));}save();closeOrdModal();toast('Order loan saved!');renderOrderLoans(document.getElementById('mainct'));}
-function ordView(id){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var st=invStatus({status:l.status,months:l.months}),mc=document.getElementById('mainct');var h='<button class="bk" onclick="renderOrderLoans(document.getElementById(\'mainct\'))">← Back</button><div style="background:linear-gradient(135deg,#1a0a2e,#3d1a6e);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;"><div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">ORDER FINANCING · '+esc(l.id)+'</div><div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.companyName)+'</div><div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.contact)+' · '+esc(l.location)+'</div></div>';h+='<div class="sg"><div class="sc"><div class="sl">Order Amount</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div><div class="sc"><div class="sl">Disbursed (70%)</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Term</div><div class="sv">'+l.termMonths+' month'+(l.termMonths>1?'s':'')+'</div></div></div>';var today=td_();h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Monthly Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Balance</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';(l.months||[]).forEach(function(p,i){var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending',bal=Math.max(0,p.amountDue-(p.amountPaid||0));h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-family:monospace;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>'+(canManage()?'<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="ordRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="ordUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>':'')+'</tr>';});h+='</tbody></table></div></div>';mc.innerHTML=h;}
+function ordCalcModal(){
+  var amt=parseFloat(document.getElementById('ord_amt')&&document.getElementById('ord_amt').value)||0;
+  var mo=parseInt(document.getElementById('ord_mo')&&document.getElementById('ord_mo').value)||1;
+  var date=document.getElementById('ord_date')&&document.getElementById('ord_date').value;
+  var sum=document.getElementById('ord_sum');if(!sum)return;
+  if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in order amount to see calculation</div>';return;}
+  var c=ordCalc(amt,mo);
+  var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;">';
+  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Order Amount</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div>';
+  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Advance (70%)</div><div style="font-size:18px;font-weight:700;color:var(--blue2);">'+zmw(c.disb)+'</div></div>';
+  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Service Charge (8.5%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svc)+'</div></div>';
+  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Net to Client</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.net)+'</div></div>';
+  h+='</div><div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  c.schedule.forEach(function(s){
+    var dd=date?ltMonthDate(date,s.month):'—';
+    h+='<div style="background:rgba(142,68,173,.1);border:1px solid rgba(142,68,173,.2);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:10px;color:var(--muted);">Month '+s.month+'</div><div style="font-size:15px;font-weight:700;color:#9b59b6;">'+zmw(s.amountDue)+'</div><div style="font-size:9px;color:var(--muted);">Due: '+fmtD(dd)+'</div></div>';
+  });
+  h+='</div>';
+  sum.innerHTML=h;
+}
+function saveOrd(){
+  var co=(document.getElementById('ord_co').value||'').trim();
+  var dir=(document.getElementById('ord_dir').value||'').trim();
+  var contact=(document.getElementById('ord_contact').value||'').trim();
+  var loc=(document.getElementById('ord_loc').value||'').trim();
+  var ordno=(document.getElementById('ord_ordno').value||'').trim();
+  var orddate=document.getElementById('ord_orddate').value;
+  var debtor=(document.getElementById('ord_debtor').value||'').trim();
+  var amt=parseFloat(document.getElementById('ord_amt').value)||0;
+  var accno=(document.getElementById('ord_accno').value||'').trim();
+  var mo=parseInt(document.getElementById('ord_mo').value)||1;
+  var date=document.getElementById('ord_date').value;
+  var coltype=document.getElementById('ord_coltype').value;
+  var conName=(document.getElementById('ord_con_name').value||'').trim();
+  var conAddr=(document.getElementById('ord_con_addr').value||'').trim();
+  var conRepDate=document.getElementById('ord_con_repdate').value;
+  var conBank=(document.getElementById('ord_con_bank').value||'').trim();
+  var notes=(document.getElementById('ord_notes').value||'').trim();
+  if(!co||!contact||!loc||!ordno||!amt||!date){toast('Please fill all required fields (marked *).');return;}
+  var c=ordCalc(amt,mo);
+  var pmts=[];for(var mx=0;mx<mo;mx++)pmts.push({month:mx+1,dueDate:ltMonthDate(date,mx+1),amountDue:c.schedule[mx].amountDue,amountPaid:0,datePaid:null});
+  var lpObj={address:(document.getElementById('ord_lp_addr').value||'').trim(),titleNumber:(document.getElementById('ord_lp_title').value||'').trim(),size:(document.getElementById('ord_lp_size').value||'').trim()};
+  var mvObj={regNumber:(document.getElementById('ord_mv_reg').value||'').trim(),chassisNumber:(document.getElementById('ord_mv_chassis').value||'').trim(),engineNumber:(document.getElementById('ord_mv_engine').value||'').trim(),make:(document.getElementById('ord_mv_make').value||'').trim(),model:(document.getElementById('ord_mv_model').value||'').trim(),color:(document.getElementById('ord_mv_color').value||'').trim()};
+  var consent={fullName:conName,residentAddress:conAddr,netAmount:c.net,repaymentDate:conRepDate,bankAccount:conBank};
+  var clientSig=getSig('ord_sig_client');
+  var repSig=getSig('ord_sig_rep');
+  if(_ordEditId){
+    var l=orderLoans.filter(function(x){return x.id===_ordEditId;})[0];
+    if(l){l.companyName=co;l.directorName=dir;l.contact=contact;l.location=loc;l.orderNumber=ordno;l.orderDate=orddate;l.debtor=debtor;l.amountGiven=amt;l.accountNumber=accno;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svc;l.disbursedAmount=c.disb;l.netAmount=c.net;l.collateralType=coltype;l.landedProp=lpObj;l.motorVehicle=mvObj;l.consent=consent;l.notes=notes;if(clientSig)l.clientSig=clientSig;if(repSig)l.repSig=repSig;if(l.months.length!==mo)l.months=pmts;}
+    _markDirty('ord',_ordEditId);logAct('Updated order — '+co);
+    save();closeOrdModal();toast('Order agreement updated! ✓');renderOrderLoans(document.getElementById('mainct'));
+  } else if(canDirectCreate()){
+    var _newOrd={id:'ORD-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,orderNumber:ordno,orderDate:orddate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,netAmount:c.net,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,months:pmts,status:'active',notes:notes,createdBy:cu.display,createdAt:now_()};
+    orderLoans.push(_newOrd);_markDirty('ord',_newOrd.id);
+    logAct('Order — '+co+' — '+zmw(amt));
+    save();closeOrdModal();toast('Order loan saved! 📦');renderOrderLoans(document.getElementById('mainct'));
+  } else {
+    var appObj={id:'APP-'+Date.now(),type:'order',product:'📦 Order Financing',clientName:co,companyName:co,directorName:dir,contact:contact,location:loc,orderNumber:ordno,orderDate:orddate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,amount:amt,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,notes:notes,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
+    corpApplications.push(appObj);_markDirty('meta','');
+    logAct('Submitted order application — '+co+' — awaiting admin approval');
+    save();closeOrdModal();toast('Application submitted for approval! ✓');buildNav();renderOrderLoans(document.getElementById('mainct'));
+  }
+}
+function ordView(id){
+  var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
+  var st=invStatus({status:l.status,months:l.months}),mc=document.getElementById('mainct');
+  var h='<button class="bk" onclick="renderOrderLoans(document.getElementById(\'mainct\'))">← Back to Order Financing</button>';
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">';
+  h+='<button class="btn btg" onclick="printOrdAgreement(\''+id+'\')" style="padding:10px 20px;">🖨️ Print Agreement + Consent</button>';
+  if(canManage()&&st!=='cleared'&&st!=='cancelled')h+='<button class="btn bto" onclick="openOrdModal(\''+id+'\')" style="padding:10px 16px;">✏️ Edit</button>';
+  if(canDo('admin'))h+='<button class="btn btd" onclick="deleteOrd(\''+id+'\')" style="padding:10px 16px;">🗑 Delete</button>';
+  h+='</div>';
+  h+='<div style="background:linear-gradient(135deg,#1a0a2e,#3d1a6e);border-radius:14px;padding:20px 24px;margin-bottom:16px;color:#fff;">';
+  h+='<div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">ORDER FINANCING · '+esc(l.id)+'</div>';
+  h+='<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.companyName)+'</div>';
+  h+='<div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.contact)+' · '+esc(l.location)+'</div></div>';
+  h+='<div class="sg"><div class="sc"><div class="sl">Order Amount</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div><div class="sc"><div class="sl">Advance (70%)</div><div class="sv" style="font-size:16px;color:var(--blue2);">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Net to Client</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(l.netAmount||l.disbursedAmount)+'</div></div><div class="sc"><div class="sl">Term</div><div class="sv">'+l.termMonths+' month'+(l.termMonths>1?'s':'')+'</div></div><div class="sc"><div class="sl">Status</div><div class="sv" style="color:'+(st==='cleared'?'var(--ok2)':st==='overdue'?'var(--red2)':'var(--blue2)')+';">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue ⚠️':'Active')+'</div></div></div>';
+  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📋 Order Details (Schedule A)</span></div><div class="cdb">';
+  h+='<div class="rm"><span class="rml">Order Number</span><span class="rmv">'+esc(l.orderNumber||'—')+'</span></div>';
+  h+='<div class="rm"><span class="rml">Order Date</span><span class="rmv">'+fmtD(l.orderDate||'')+'</span></div>';
+  h+='<div class="rm"><span class="rml">Debtor</span><span class="rmv">'+esc(l.debtor||'—')+'</span></div>';
+  h+='<div class="rm"><span class="rml">Account Number</span><span class="rmv">'+esc(l.accountNumber||'—')+'</span></div>';
+  h+='<div class="rm"><span class="rml">Date Given</span><span class="rmv">'+fmtD(l.dateGiven)+'</span></div>';
+  if(l.notes)h+='<div class="rm"><span class="rml">Notes</span><span class="rmv">'+esc(l.notes)+'</span></div>';
+  h+='</div></div>';
+  if(l.collateralType){
+    h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">🔒 Collateral</span></div><div class="cdb">';
+    h+='<div class="rm"><span class="rml">Type</span><span class="rmv">'+esc(l.collateralType==='landed'?'Landed Property':l.collateralType==='vehicle'?'Motor Vehicle':'Both')+'</span></div>';
+    if((l.collateralType==='landed'||l.collateralType==='both')&&l.landedProp){h+='<div class="rm"><span class="rml">Address</span><span class="rmv">'+esc(l.landedProp.address||'—')+'</span></div><div class="rm"><span class="rml">Title No</span><span class="rmv">'+esc(l.landedProp.titleNumber||'—')+'</span></div><div class="rm"><span class="rml">Size</span><span class="rmv">'+esc(l.landedProp.size||'—')+'</span></div>';}
+    if((l.collateralType==='vehicle'||l.collateralType==='both')&&l.motorVehicle){h+='<div class="rm"><span class="rml">Reg No</span><span class="rmv">'+esc(l.motorVehicle.regNumber||'—')+'</span></div><div class="rm"><span class="rml">Make / Model / Color</span><span class="rmv">'+esc((l.motorVehicle.make||'')+' '+(l.motorVehicle.model||'')+' ('+(l.motorVehicle.color||')'))+'</span></div>';}
+    h+='</div></div>';
+  }
+  if(l.consent){
+    h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📝 Consent Form</span></div><div class="cdb">';
+    h+='<div class="rm"><span class="rml">Applicant Name</span><span class="rmv">'+esc(l.consent.fullName||'—')+'</span></div>';
+    h+='<div class="rm"><span class="rml">Resident Address</span><span class="rmv">'+esc(l.consent.residentAddress||'—')+'</span></div>';
+    h+='<div class="rm"><span class="rml">Net Amount</span><span class="rmv" style="font-weight:700;color:var(--gold);">'+zmw(l.consent.netAmount||l.netAmount||l.disbursedAmount)+'</span></div>';
+    h+='<div class="rm"><span class="rml">Repayment Date</span><span class="rmv">'+fmtD(l.consent.repaymentDate||'')+'</span></div>';
+    h+='<div class="rm"><span class="rml">Zanaco Account</span><span class="rmv">'+esc(l.consent.bankAccount||'—')+'</span></div>';
+    h+='</div></div>';
+  }
+  if(l.clientSig||l.repSig){
+    h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">✍️ Signatures on File</span></div><div class="cdb" style="display:flex;gap:30px;flex-wrap:wrap;">';
+    if(l.clientSig)h+='<div><div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Client / Applicant</div><img src="'+l.clientSig+'" style="height:64px;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,.3);"></div>';
+    if(l.repSig)h+='<div><div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Salty Enterprises Rep</div><img src="'+l.repSig+'" style="height:64px;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,.3);"></div>';
+    h+='</div></div>';
+  }
+  var today=td_();
+  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Monthly Repayment Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Balance</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';
+  (l.months||[]).forEach(function(p,i){
+    var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending';
+    var bal=Math.max(0,p.amountDue-(p.amountPaid||0));
+    h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-family:monospace;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>';
+    if(canManage())h+='<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="ordRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="ordUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div></div>';
+  mc.innerHTML=h;
+}
+function printOrdAgreement(id){
+  var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
+  var d=new Date(l.dateGiven+'T00:00:00');
+  var months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var dayN=d.getDate(),monN=months[d.getMonth()],yrN=d.getFullYear();
+  var netAmt=(l.consent&&l.consent.netAmount)||l.netAmount||l.disbursedAmount;
+  var conName=(l.consent&&l.consent.fullName)||l.directorName||'';
+  var conAddr=(l.consent&&l.consent.residentAddress)||l.location||'';
+  var repDate=(l.consent&&l.consent.repaymentDate)?fmtD(l.consent.repaymentDate):'_______________';
+  var bankAcc=(l.consent&&l.consent.bankAccount)||'';
+  var collDesc='';
+  if((l.collateralType==='vehicle'||l.collateralType==='both')&&l.motorVehicle)collDesc=(l.motorVehicle.make||'')+' '+(l.motorVehicle.model||'')+' Reg: '+(l.motorVehicle.regNumber||'');
+  else if((l.collateralType==='landed'||l.collateralType==='both')&&l.landedProp)collDesc=l.landedProp.address||'';
+  else collDesc='...';
+  var w=window.open('','_blank');
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Order Agreement — '+esc(l.companyName)+'</title>';
+  html+='<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,Helvetica,sans-serif;font-size:11.5pt;line-height:1.65;color:#000;padding:30px 45px;}.no-print{margin-bottom:20px;}h1{font-size:15pt;text-align:center;font-weight:bold;margin:0 0 18px;text-transform:uppercase;letter-spacing:1px;}h2{font-size:12pt;font-weight:bold;margin:18px 0 8px;}p{margin:7px 0;}.parties{margin:14px 0;}.sig-row{display:flex;justify-content:space-between;margin-top:30px;gap:20px;}.sig-col{width:47%;}.sig-line{display:inline-block;border-bottom:1px solid #000;min-width:180px;margin-left:4px;}.page-break{page-break-before:always;}.bold{font-weight:bold;}table{width:100%;border-collapse:collapse;margin:10px 0;}td{padding:6px 8px;border:1px solid #000;}td:first-child{font-weight:bold;width:180px;}ul,ol{margin:6px 0 6px 24px;}li{margin:3px 0;}@media print{.no-print{display:none!important;}}</style></head><body>';
+  html+='<div class="no-print"><button onclick="window.print()" style="padding:10px 24px;background:#c9a84c;color:#000;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;margin-right:10px;">🖨️ Print / Save as PDF</button><button onclick="window.close()" style="padding:10px 16px;background:#333;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;">Close</button></div>';
+  html+='<h1>Order Assignment Agreement</h1>';
+  html+='<p>This ORDER ASSIGNMENT AGREEMENT ("Agreement") is made and entered into this <span class="bold">'+dayN+'</span> day of <span class="bold">'+monN+'</span>, <span class="bold">'+yrN+'</span> by and between:</p>';
+  html+='<div class="parties"><p><span class="bold">1. '+esc(l.companyName)+'</span>, a company duly incorporated in accordance with the laws of Zambia, having its registered office at '+esc(l.location)+' (hereinafter referred to as the "Assignor");</p>';
+  html+='<p style="text-align:center;font-weight:bold;margin:12px 0;">AND</p>';
+  html+='<p><span class="bold">2. Salty Enterprises</span>, a company duly incorporated in accordance with the laws of Zambia, having its registered office at House No. 83, Kalungwishi Street, Kitwe (hereinafter referred to as the "Assignee").</p></div>';
+  html+='<h2>WHEREAS:</h2><p>A. The Assignor is entitled to certain payment(s) under one or more orders issued to its clients (the "Orders");</p><p>B. The Assignor wishes to assign to the Assignee, and the Assignee agrees to accept such assignment, on the terms set forth in this Agreement.</p>';
+  html+='<p>NOW, THEREFORE, in consideration of the mutual covenants and agreements herein contained, the parties hereby agree as follows:</p>';
+  html+='<h2>1. Assignment of Orders</h2><p>1.1 The Assignor hereby assigns to the Assignee all rights, title, and interest in and to the orders listed in Schedule A attached hereto, including the right to collect and receive payments due under such orders.</p><p>1.2 The Assignee agrees to advance payment to the Assignor based on the value of the orders, less the agreed fees and charges, subject to the terms of this Agreement.</p>';
+  html+='<h2>2. Fees and Charges</h2><p>2.1 The assignee will charge the assignor:</p><ul><li>8.5% service charge on the total value of each order of the assignor</li><li>A 5% service fee every month</li></ul><p>2.2 The monthly service fee under clause 2.1 shall accrue for a maximum period of three (3) months, after which additional conditions shall apply, as outlined in clause 3 below.</p>';
+  html+='<h2>3. Warranties and Representations</h2><p>3.1 The Assignor represents and warrants that:</p><ul><li>The orders are valid and enforceable.</li><li>There are no disputes or claims concerning the orders.</li><li>The Assignor has full authority to assign the orders.</li></ul><p>3.2 The Assignee acknowledges that it is accepting the assignment based on the warranties of the Assignor and will have the right to pursue collection independently.</p>';
+  html+='<h2>4. Collateral</h2><p>4.1 This loan is guaranteed by collateral such as a house or a car under comprehensive insurance.</p><p>4.2 The collateral provided by the Borrower serves as security for all amounts advanced under this Order Finance Agreement, including principal, interest, fees, and any enforcement costs.</p>';
+  var cN=3;
+  if((l.collateralType==='landed'||l.collateralType==='both')&&l.landedProp){
+    html+='<p><span class="bold">LANDED PROPERTY</span></p>';
+    html+='<p>a. Address: '+(l.landedProp.address||'___________________________')+'</p>';
+    html+='<p>b. Title Number: '+(l.landedProp.titleNumber||'___________________________')+'</p>';
+    html+='<p>c. Size: '+(l.landedProp.size||'___________________________')+'</p>';
+    html+='<p>d. Location: '+(l.landedProp.address||'___________________________')+'</p>';
+    html+='<p>e. Signature: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:40px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</p>';
+    cN++;
+  }
+  if((l.collateralType==='vehicle'||l.collateralType==='both')&&l.motorVehicle){
+    html+='<p><span class="bold">MOTOR VEHICLE</span></p>';
+    html+='<p>a. Registration Number: '+(l.motorVehicle.regNumber||'___________________________')+'</p>';
+    html+='<p>b. Chassis Number: '+(l.motorVehicle.chassisNumber||'___________________________')+'</p>';
+    html+='<p>c. Engine Number: '+(l.motorVehicle.engineNumber||'___________________________')+'</p>';
+    html+='<p>d. Make: '+(l.motorVehicle.make||'___________________________')+'</p>';
+    html+='<p>e. Model: '+(l.motorVehicle.model||'___________________________')+'</p>';
+    html+='<p>f. Color: '+(l.motorVehicle.color||'___________________________')+'</p>';
+    html+='<p>g. Signature: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:40px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</p>';
+  }
+  html+='<h2>DEFAULT CLAUSES</h2><p>The borrower shall be deemed to be in default under the agreement if;</p><ol><li>The borrower fails to pay on the assignment date</li><li>The borrower breaches the agreement by becoming non-compliant to the terms and conditions set in this agreement.</li><li>The borrower becomes insolvent or bankrupt.</li><li>The borrower permits the collateral to be disposed of, encumbered, or otherwise impaired without the lender\'s written consent.</li></ol><p>Upon the occurrence of default, the lender will be given 15 working days to pay the entire outstanding and an additional 5% on the outstanding balance and exercise all remedies available under the law and this agreement, failure to which the company will start the process of seizure of the pledged collateral.</p>';
+  html+='<h2>5. Governing Law</h2><p>This Agreement shall be governed by and construed in accordance with the laws of the Republic of Zambia. Any disputes arising hereunder shall be subject to the jurisdiction of the courts of Zambia.</p>';
+  html+='<h2>6. Miscellaneous</h2><p>6.1 This Agreement constitutes the entire agreement between the parties and supersedes all prior discussions or agreements.</p><p>6.2 Any amendments to this Agreement must be made in writing and signed by both parties.</p>';
+  html+='<p>IN WITNESS WHEREOF, the parties have executed this Order Assignment Agreement on the date first written above.</p>';
+  html+='<div class="sig-row"><div class="sig-col"><p><span class="bold">SIGNED for and on behalf of (Assignor):</span></p><p>Name: '+esc(l.directorName||l.companyName||'')+'</p><p>Designation: ___________________________</p><p>Signature: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:50px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</p><p>Date: '+fmtD(l.dateGiven)+'</p><p>Phone: '+esc(l.contact||'')+'</p></div>';
+  html+='<div class="sig-col"><p><span class="bold">SIGNED for and on behalf of SALTY ENTERPRISES (Assignee):</span></p><p>Name: ___________________________</p><p>Designation: ___________________________</p><p>Signature: '+(l.repSig?'<img src="'+l.repSig+'" style="height:50px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</p><p>Date: '+fmtD(td_())+'</p><p>Phone: ___________________________</p></div></div>';
+  html+='<h2>SCHEDULE 1: Copy of Assigned Order</h2>';
+  html+='<table><tr><td>Order Number</td><td>'+esc(l.orderNumber||'')+'</td></tr><tr><td>Order Date</td><td>'+fmtD(l.orderDate||'')+'</td></tr><tr><td>Order Amount</td><td>'+zmw(l.amountGiven)+'</td></tr><tr><td>Account Number</td><td>'+esc(l.accountNumber||'')+'</td></tr><tr><td>Debtor</td><td>'+esc(l.debtor||'')+'</td></tr></table>';
+  // CONSENT FORM
+  html+='<div class="page-break"></div>';
+  html+='<h1>Consent Form</h1>';
+  html+='<p>I, <span class="bold">'+esc(conName)+'</span> a resident at <span class="bold">'+esc(conAddr)+'</span> do hereby apply for a loan in the sum of <span class="bold">'+zmw(l.amountGiven)+'</span> from SALTY ENTERPRISES. I have pledged <span class="bold">'+esc(collDesc)+'</span> as collateral and I warrant and declare that I have read the standard terms and conditions upon which facility will be rendered to me and I agree to comply with all the necessary requirements for this facility and pay all fees and charges relating to this transaction and that, by signing this consent form, I authorise SALTY ENTERPRISES to collect from my approved loan all the necessary fees and charges and pay the fees and/or my previous loan balance or any charge specified hereunder:</p>';
+  html+='<p>I, <span class="bold">'+esc(conName)+'</span> do hereby confirm and agree that the sum of <span class="bold">'+zmw(netAmt)+'</span> is the net amount I will get after disbursement of the loan. I am requesting that my repayment date be: <span class="bold">'+repDate+'</span></p>';
+  html+='<p><span class="bold">I also undertake that I will promptly make my payment on or before the date I have chosen above by way of bank deposit under Zanaco account number '+(bankAcc?'<span class="bold">'+esc(bankAcc)+'</span>':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</span></p>';
+  html+='<p>I further declare and warrant that the information I have rendered in support of my application, I do hereby confirm that this information is true, correct, and accurate in every respect and I understand that this information is the basis upon which Salty Enterprises has determined to avail the credit facility to me. Therefore, should any of this information be incorrect in any respect, SALTY ENTERPRISES reserve the right to withdrawal its offer of the facility and/or terminate the application process relating to the offer of this facility to me without bearing any legal obligation or consequence. SALTY ENTERPRISES may, where necessary institute legal proceedings against me if the information supplied by me is untrue.</p>';
+  html+='<div style="margin-top:40px;display:flex;align-items:flex-end;gap:50px;flex-wrap:wrap;">';
+  html+='<div>Signed at: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>';
+  html+='<div>Date: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>';
+  html+='<div>Signature of applicant: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:50px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</div>';
+  html+='</div></body></html>';
+  w.document.write(html);w.document.close();
+}
 function ordRecordPay(id,i){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' balance: '+zmw(def)+'\nEnter amount:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();var all=true;for(var j=0;j<l.months.length;j++)if(l.months[j].amountPaid<l.months[j].amountDue-1){all=false;break;}if(all)l.status='cleared';_markDirty('ord',l.id);logAct('Order pay — '+l.companyName+' M'+p.month+' — '+zmw(amt));save();toast('Payment recorded!');ordView(id);}
 function ordUndoPay(id,i){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i];if(!confirm('Undo?'))return;p.amountPaid=0;p.datePaid=null;if(l.status==='cleared')l.status='active';_markDirty('ord',l.id);save();toast('Undone.');ordView(id);}
+
 // ===== SALARY ADVANCE =====
 function findSalCo(id){for(var i=0;i<salaryLoans.length;i++)if(salaryLoans[i].id===id)return salaryLoans[i];return null;}
 function salCalcEmp(amt,months){var svc=Math.round(amt*0.06*100)/100,disb=Math.round((amt-svc)*100)/100,intTotal=Math.round(amt*0.13*months*100)/100,totalDue=Math.round((amt+intTotal)*100)/100,monthly=Math.round(totalDue/months*100)/100,commission=Math.round(intTotal*0.03*100)/100;return {svc:svc,disb:disb,intTotal:intTotal,totalDue:totalDue,monthly:monthly,commission:commission};}
