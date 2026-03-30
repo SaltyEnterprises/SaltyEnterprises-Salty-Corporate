@@ -586,6 +586,7 @@ function renderLongTermLoans(mc){
   var h='<div class="pgh" style="background:linear-gradient(135deg,#0a1f10,#1a3a24);">';
   h+='<div><div class="pgt">💼 Long Term Loans</div><div class="pgs">Monthly repayments · 1–12 months · Tiered rates · Service charge deducted upfront</div></div>';
   if(canManage())h+='<button class="btn btg" onclick="openLTModal()">+ New Application</button>';
+  h+='<button class="btn bto" onclick="openPrintTemplate(\'lt\')" style="border-color:var(--gold);color:var(--gold);">📝 Edit Template</button>';
   h+='</div>';
   h+='<div class="sg"><div class="sc"><div class="si">💼</div><div class="sl">Active</div><div class="sv">'+stats.active+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+stats.overdue+'</div></div><div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Cleared</div><div class="sv" style="color:var(--ok2)">'+stats.cleared+'</div></div><div class="sc"><div class="si">💰</div><div class="sl">Disbursed</div><div class="sv" style="font-size:14px;">'+zmw(stats.out)+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">📊</div><div class="sl">Balance Due</div><div class="sv" style="font-size:14px;color:var(--red2);">'+zmw(stats.bal)+'</div></div></div>';
   h+='<div class="cd" style="margin-bottom:14px;"><div class="cdh"><span class="cdt">Interest Rate Tiers</span></div><div style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;">';
@@ -1012,7 +1013,7 @@ function ltView(id){
   h+='</tbody></table></div></div>';
   mc.innerHTML=h;
 }
-function printLTApplication(id,l){
+function printLTApplication(id,l,templateMode){
   if(!l)l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
   var w=window.open('','_blank');
   var conName=(l.consent&&l.consent.fullName)||l.clientName||'';
@@ -1104,6 +1105,7 @@ function printLTApplication(id,l){
   html+='<p style="margin-top:8px;">Approved by: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> Sign: '+(l.repSig?'<img src="'+l.repSig+'" style="height:45px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+' Date: <span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>';
   html+='</body></html>';
   html+='<script>var _editOn=false;function toggleEdit(){_editOn=!_editOn;document.body.classList.toggle(\'editing\',_editOn);var btn=document.querySelector(\'.btn-edit\');var hint=document.getElementById(\'editHint\');if(_editOn){btn.textContent=\'\u2705 Done Editing\';btn.style.background=\'#e74c3c\';btn.style.color=\'#fff\';hint.textContent=\'Click any highlighted section to edit, then Done Editing when finished.\';document.querySelectorAll(\'.editable\').forEach(function(el){el.setAttribute(\'contenteditable\',\'true\');});}else{btn.textContent=\'\u270f\ufe0f Edit Mode\';btn.style.background=\'#c9a84c\';btn.style.color=\'#000\';hint.textContent=\'Click Edit Mode to modify any section before printing\';document.querySelectorAll(\'.editable\').forEach(function(el){el.setAttribute(\'contenteditable\',\'false\');});}}<\/script>';
+  if(templateMode)html+='<script>window.addEventListener(\'load\',function(){toggleEdit();});<\/script>';
   w.document.write(html);w.document.close();
 }
 function ltRecordPay(id,i){var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.payments[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' — Balance: '+zmw(def)+'\nEnter amount paid:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();if(ltTotalPaid(l)>=(l.totalDue-1))l.status='cleared';_markDirty('lt',l.id);logAct('LT payment — '+l.clientName+' Month '+p.month+' — '+zmw(amt));save();toast('Payment recorded!');ltView(id);}
@@ -1465,6 +1467,7 @@ function renderInvoiceLoans(mc){
   var h='<div class="pgh" style="background:linear-gradient(135deg,#0d0d2e,#1a1a5c);">';
   h+='<div><div class="pgt">📄 Invoice Discounting</div><div class="pgs">80% advance · 5%/month compounding · 8.5% service charge · Max 3 months</div></div>';
   if(canManage())h+='<button class="btn btg" onclick="openInvModal()">+ New Invoice</button>';
+  h+='<button class="btn bto" onclick="openPrintTemplate(\'inv\')" style="border-color:var(--gold);color:var(--gold);">📝 Edit Template</button>';
   h+='</div>';
   h+='<div class="sg"><div class="sc"><div class="si">📄</div><div class="sl">Active</div><div class="sv">'+stats.active+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+stats.overdue+'</div></div><div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Cleared</div><div class="sv" style="color:var(--ok2)">'+stats.cleared+'</div></div><div class="sc"><div class="si">💰</div><div class="sl">Outstanding</div><div class="sv" style="font-size:14px;">'+zmw(stats.out)+'</div></div></div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
@@ -1682,7 +1685,7 @@ function invView(id){
   h+='</tbody></table></div></div>';
   mc.innerHTML=h;
 }
-function printInvAgreement(id,l){
+function printInvAgreement(id,l,templateMode){
   if(!l)l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
   var d=new Date(l.dateGiven+'T00:00:00');
   var months=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -1753,6 +1756,7 @@ function printInvAgreement(id,l){
   html+='<div>Signature of applicant: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:50px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</div>';
   html+='</div></body></html>';
   html+='<script>var _editOn=false;function toggleEdit(){_editOn=!_editOn;document.body.classList.toggle(\'editing\',_editOn);var btn=document.querySelector(\'.btn-edit\');var hint=document.getElementById(\'editHint\');if(_editOn){btn.textContent=\'\u2705 Done Editing\';btn.style.background=\'#e74c3c\';btn.style.color=\'#fff\';hint.textContent=\'Click any highlighted section to edit, then Done Editing when finished.\';document.querySelectorAll(\'.editable\').forEach(function(el){el.setAttribute(\'contenteditable\',\'true\');});}else{btn.textContent=\'\u270f\ufe0f Edit Mode\';btn.style.background=\'#c9a84c\';btn.style.color=\'#000\';hint.textContent=\'Click Edit Mode to modify any section before printing\';document.querySelectorAll(\'.editable\').forEach(function(el){el.setAttribute(\'contenteditable\',\'false\');});}}<\/script>';
+  if(templateMode)html+='<script>window.addEventListener(\'load\',function(){toggleEdit();});<\/script>';
   w.document.write(html);w.document.close();
 }
 function invRecordPay(id,i){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' balance: '+zmw(def)+'\nEnter amount:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();var all=true;for(var j=0;j<l.months.length;j++)if(l.months[j].amountPaid<l.months[j].amountDue-1){all=false;break;}if(all)l.status='cleared';_markDirty('inv',l.id);logAct('Invoice pay — '+l.companyName+' M'+p.month+' — '+zmw(amt));save();toast('Payment recorded!');invView(id);}
@@ -1776,6 +1780,7 @@ function renderOrderLoans(mc){
   var h='<div class="pgh" style="background:linear-gradient(135deg,#1a0a2e,#3d1a6e);">';
   h+='<div><div class="pgt">📦 Order Financing</div><div class="pgs">70% advance · 5%/month compounding · 8.5% service charge · Max 3 months</div></div>';
   if(canManage())h+='<button class="btn btg" onclick="openOrdModal()">+ New Order</button>';
+  h+='<button class="btn bto" onclick="openPrintTemplate(\'ord\')" style="border-color:var(--gold);color:var(--gold);">📝 Edit Template</button>';
   h+='</div>';
   h+='<div class="sg"><div class="sc"><div class="si">📦</div><div class="sl">Active</div><div class="sv">'+stats.active+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+stats.overdue+'</div></div><div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Cleared</div><div class="sv" style="color:var(--ok2)">'+stats.cleared+'</div></div><div class="sc"><div class="si">💰</div><div class="sl">Outstanding</div><div class="sv" style="font-size:14px;">'+zmw(stats.out)+'</div></div></div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
@@ -1987,7 +1992,7 @@ function ordView(id){
   h+='</tbody></table></div></div>';
   mc.innerHTML=h;
 }
-function printOrdAgreement(id,l){
+function printOrdAgreement(id,l,templateMode){
   if(!l)l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;
   var d=new Date(l.dateGiven+'T00:00:00');
   var months=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -2057,6 +2062,7 @@ function printOrdAgreement(id,l){
   html+='<div>Signature of applicant: '+(l.clientSig?'<img src="'+l.clientSig+'" style="height:50px;vertical-align:middle;">':'<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')+'</div>';
   html+='</div></body></html>';
   html+='<script>var _editOn=false;function toggleEdit(){_editOn=!_editOn;document.body.classList.toggle(\'editing\',_editOn);var btn=document.querySelector(\'.btn-edit\');var hint=document.getElementById(\'editHint\');if(_editOn){btn.textContent=\'\u2705 Done Editing\';btn.style.background=\'#e74c3c\';btn.style.color=\'#fff\';hint.textContent=\'Click any highlighted section to edit, then Done Editing when finished.\';document.querySelectorAll(\'.editable\').forEach(function(el){el.setAttribute(\'contenteditable\',\'true\');});}else{btn.textContent=\'\u270f\ufe0f Edit Mode\';btn.style.background=\'#c9a84c\';btn.style.color=\'#000\';hint.textContent=\'Click Edit Mode to modify any section before printing\';document.querySelectorAll(\'.editable\').forEach(function(el){el.setAttribute(\'contenteditable\',\'false\');});}}<\/script>';
+  if(templateMode)html+='<script>window.addEventListener(\'load\',function(){toggleEdit();});<\/script>';
   w.document.write(html);w.document.close();
 }
 function ordRecordPay(id,i){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' balance: '+zmw(def)+'\nEnter amount:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();var all=true;for(var j=0;j<l.months.length;j++)if(l.months[j].amountPaid<l.months[j].amountDue-1){all=false;break;}if(all)l.status='cleared';_markDirty('ord',l.id);logAct('Order pay — '+l.companyName+' M'+p.month+' — '+zmw(amt));save();toast('Payment recorded!');ordView(id);}
@@ -2697,6 +2703,59 @@ buildNav=function(){
     }
   }catch(e){}
 })();
+
+// ===== OPEN BLANK TEMPLATE FOR EDITING =====
+function openPrintTemplate(type){
+  // Build a blank/placeholder loan object so print functions render a full template
+  var today = td_();
+  if(type==='lt'){
+    var blank={
+      id:'TEMPLATE',clientType:'individual',clientName:'[ Client Full Name ]',
+      companyName:'',gender:'',nrc:'[ ID / NRC ]',nationality:'Zambian',dob:'',
+      location:'[ Residential Address ]',contact:'[ Phone Number ]',loanCycle:'New',
+      bizType:'[ Type of Business ]',bizYears:'',bizRegNo:'',bizEmployees:'',
+      tpin:'',bizAssets:0,bizIncome:0,bizAddress:'[ Business Address ]',
+      amountGiven:0,loanPurpose:'[ Purpose of Loan ]',termMonths:12,dateGiven:today,
+      serviceCharge:0,disbursedAmount:0,interestRate:0.067,monthlyPayment:0,totalDue:0,totalInterest:0,
+      collateralItems:[{type:'[ Collateral Type ]',description:'[ Description ]',purchasePrice:0,currentValue:0}],
+      maritalStatus:'',trackerStatus:'N/A',caveatStatus:'N/A',
+      spousalConsent:{spouseName:'',spouseNRC:'',plotNo:'',spousePhone:''},
+      secondDirector:{name:'',nrc:'',dob:'',resAddress:'',bizAddress:'',phone:''},
+      nextOfKin:{name:'',nrc:'',dob:'',resAddress:'',bizAddress:'',phone:''},
+      consent:{fullName:'[ Applicant Full Name ]',residentAddress:'[ Resident Address ]',netAmount:0,repaymentDate:'',bankAccount:''},
+      shareholders:[],clientSig:null,repSig:null,dir2Sig:null,createdBy:'',payments:[]
+    };
+    printLTApplication(null, blank, true);
+  } else if(type==='inv'){
+    var blank={
+      id:'TEMPLATE',companyName:'[ Company Name ]',directorName:'[ Director Name ]',
+      contact:'[ Phone Number ]',location:'[ Registered Address ]',
+      invoiceNumber:'[ Invoice No ]',invoiceDate:today,debtor:'[ Debtor / Customer Name ]',
+      amountGiven:0,accountNumber:'[ Account Number ]',termMonths:3,dateGiven:today,
+      serviceCharge:0,disbursedAmount:0,netAmount:0,
+      collateralType:'vehicle',
+      landedProp:{address:'[ Property Address ]',titleNumber:'[ Title/Deed No ]'},
+      motorVehicle:{regNumber:'[ Reg No ]',chassisNumber:'[ Chassis No ]',engineNumber:'[ Engine No ]',make:'[ Make ]',model:'[ Model ]',color:'[ Color ]'},
+      consent:{fullName:'[ Applicant Name ]',residentAddress:'[ Resident Address ]',netAmount:0,repaymentDate:'',bankAccount:'[ Zanaco Account No ]'},
+      clientSig:null,repSig:null,months:[]
+    };
+    printInvAgreement(null, blank, true);
+  } else if(type==='ord'){
+    var blank={
+      id:'TEMPLATE',companyName:'[ Company Name ]',directorName:'[ Director Name ]',
+      contact:'[ Phone Number ]',location:'[ Registered Address ]',
+      orderNumber:'[ Order No ]',orderDate:today,debtor:'[ Debtor / Customer Name ]',
+      amountGiven:0,accountNumber:'[ Account Number ]',termMonths:3,dateGiven:today,
+      serviceCharge:0,disbursedAmount:0,netAmount:0,
+      collateralType:'vehicle',
+      landedProp:{address:'[ Property Address ]',titleNumber:'[ Title No ]',size:'[ Size ]'},
+      motorVehicle:{regNumber:'[ Reg No ]',chassisNumber:'[ Chassis No ]',engineNumber:'[ Engine No ]',make:'[ Make ]',model:'[ Model ]',color:'[ Color ]'},
+      consent:{fullName:'[ Applicant Name ]',residentAddress:'[ Resident Address ]',netAmount:0,repaymentDate:'',bankAccount:'[ Zanaco Account No ]'},
+      clientSig:null,repSig:null,months:[]
+    };
+    printOrdAgreement(null, blank, true);
+  }
+}
 
 // ===== PRINT FROM MODAL (before saving) =====
 function _gv(id){var el=document.getElementById(id);return el?(el.value||'').trim():'';}
