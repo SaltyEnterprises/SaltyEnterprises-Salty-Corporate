@@ -614,7 +614,7 @@ function saveIL(){
     save();closeILModal();toast('Instant loan saved!');renderInstantLoans(document.getElementById('mainct'));
   }
 }
-function _queueILAppPhotos(appId){var photos=_ilPhotos.slice(),uploads=[],results=[];photos.forEach(function(p,i){var fileOrUrl=p.file||p.preview;if(!fileOrUrl)return;var slot=results.length;results.push(null);uploads.push(_uploadOnePhoto(fileOrUrl,'ILAPP_'+appId+'_'+i+'_'+Date.now()).then(function(u){if(u)results[slot]=u;}));});Promise.all(uploads).then(function(){var urls=results.filter(Boolean);if(!urls.length)return;var a=corpApplications.filter(function(x){return x.id===appId;})[0];if(a){a.photos=(a.photos||[]).concat(urls);save();toast('📷 '+urls.length+' photo(s) saved!');}});}
+function _queueILAppPhotos(appId){var photos=_ilPhotos.slice(),uploads=[],results=[];photos.forEach(function(p,i){var fileOrUrl=p.file||p.preview;if(!fileOrUrl)return;var slot=results.length;results.push(null);uploads.push(_uploadOnePhoto(fileOrUrl,'ILAPP_'+appId+'_'+i+'_'+Date.now()).then(function(u){if(u)results[slot]=u;}));});Promise.all(uploads).then(function(){var urls=results.filter(Boolean);if(!urls.length)return;var a=corpApplications.filter(function(x){return x.id===appId;})[0];if(a){a.photos=(a.photos||[]).concat(urls);if(_fbReady&&_db){var _ps=JSON.parse(JSON.stringify(a));_db.collection('salty-corporate').doc('apps').collection('apps').doc(appId).set(_ps).catch(function(e){_dirty.apps[appId]=true;setTimeout(_pushToFirebase,1000);});}_saveLS();toast('📷 '+urls.length+' photo(s) saved!');}});}
 function _uploadILPhotos(id){var photos=_ilPhotos.slice(),uploads=[],results=[];photos.forEach(function(p,i){var fileOrUrl=p.file||p.preview;if(!fileOrUrl)return;var slot=results.length;results.push(null);uploads.push(_uploadOnePhoto(fileOrUrl,'IL_'+id+'_'+i+'_'+Date.now()).then(function(u){if(u)results[slot]=u;}));});Promise.all(uploads).then(function(){var urls=results.filter(Boolean);if(!urls.length)return;var l=instantLoans.filter(function(x){return x.id===id;})[0];if(l){l.photos=(l.photos||[]).concat(urls);_markDirty('il',l.id);save();toast('📷 '+urls.length+' photo(s) saved!');}});}
 function ilSettle(id){var l=instantLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var td=ilTotalDue(l);if(!confirm('Mark FULLY SETTLED?\nClient: '+l.clientName+'\nTotal Due: '+zmw(td)))return;l.status='cleared';l.settledDate=td_();l.settledAmount=td;l.weeksUsed=l.termWeeks;logAct('IL settled — '+l.clientName+' — '+zmw(td));save();toast('Loan settled!');renderInstantLoans(document.getElementById('mainct'));}
 function ilEarlySettle(id){var l=instantLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var today=td_(),days=Math.max(1,Math.floor((new Date(today+'T00:00:00')-new Date(l.dateGiven+'T00:00:00'))/(864e5))),wks=Math.min(l.termWeeks,Math.max(1,Math.ceil(days/7))),rate=IL_RATES[wks]||IL_RATES[l.termWeeks],earlyAmt=Math.round(l.amountGiven*(1+rate)*100)/100;if(!confirm('EARLY SETTLEMENT\nClient: '+l.clientName+'\nWeeks elapsed: '+wks+'\nRate: '+(rate*100)+'%\nAmount: '+zmw(earlyAmt)+'\n\nConfirm?'))return;l.status='cleared';l.settledDate=today;l.settledAmount=earlyAmt;l.weeksUsed=wks;logAct('IL early settle — '+l.clientName+' — wk'+wks+' — '+zmw(earlyAmt));save();toast('Early settlement — client pays '+zmw(earlyAmt));renderInstantLoans(document.getElementById('mainct'));}
@@ -653,7 +653,83 @@ function ilView(id){
   if(canManage()&&st!=='cleared'&&st!=='cancelled'){h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"><button class="btn btok" style="flex:1;padding:12px;" onclick="ilSettle(\''+id+'\')">✓ Full Settlement</button><button class="btn" style="flex:1;padding:12px;background:rgba(41,128,185,.15);border:1px solid rgba(41,128,185,.3);color:var(--blue2);" onclick="ilEarlySettle(\''+id+'\')">📅 Early Settlement</button><button class="btn bto" style="flex:1;padding:12px;" onclick="openILModal(\''+id+'\')">✏️ Edit</button>'+(st==='overdue_cancel'?'<button class="btn btd" style="flex:1;padding:12px;" onclick="ilCancel(\''+id+'\')">✗ Cancel &amp; Sell Collateral</button>':'')+'</div>';}
   mc.innerHTML=h;
 }
-// ===== LONG TERM LOANS =====
+var _ltPhotos=[];
+var _invPhotos=[];
+var _ordPhotos=[];
+
+// ── Generic photo handler ────────────────────────────────────────────────
+function _handlePhotos(arr, inputEl, prevId){
+  Array.from(inputEl.files).forEach(function(f){
+    arr.push({name:f.name,file:f});
+    var d=document.createElement('div');d.className='fitm';
+    d.innerHTML='<span>'+esc(f.name.substring(0,25))+'</span><span style="color:var(--muted);font-size:10px;">'+Math.round(f.size/1024)+'KB</span>';
+    var prev=document.getElementById(prevId);if(prev)prev.appendChild(d);
+  });
+}
+function ltHandlePhotos(input){_handlePhotos(_ltPhotos,input,'lt_prev');}
+function invHandlePhotos(input){_handlePhotos(_invPhotos,input,'inv_prev');}
+function ordHandlePhotos(input){_handlePhotos(_ordPhotos,input,'ord_prev');}
+
+// ── Upload photos for direct-create loans ───────────────────────────────
+function _uploadLoanPhotos(photoArr,prefix,id,arr,col){
+  var uploads=[],results=[];
+  photoArr.forEach(function(p,i){
+    var fOrU=p.file||p.preview;if(!fOrU)return;
+    var slot=results.length;results.push(null);
+    uploads.push(_uploadOnePhoto(fOrU,prefix+'_'+id+'_'+i+'_'+Date.now()).then(function(u){if(u)results[slot]=u;}));
+  });
+  Promise.all(uploads).then(function(){
+    var urls=results.filter(Boolean);if(!urls.length)return;
+    var item=arr.filter(function(x){return x.id===id;})[0];
+    if(item){item.photos=(item.photos||[]).concat(urls);_markDirty(col,id);save();toast('📷 '+urls.length+' photo(s) uploaded!');}
+  });
+}
+function _uploadLTPhotos(id){_uploadLoanPhotos(_ltPhotos,'LT',id,longTermLoans,'lt');}
+function _uploadInvPhotos(id){_uploadLoanPhotos(_invPhotos,'INV',id,invoiceLoans,'inv');}
+function _uploadOrdPhotos(id){_uploadLoanPhotos(_ordPhotos,'ORD',id,orderLoans,'ord');}
+
+// ── Upload photos for application submissions (non-admin) ────────────────
+function _queueAppPhotos(photoArr,prefix,appId){
+  var uploads=[],results=[];
+  photoArr.forEach(function(p,i){
+    var fOrU=p.file||p.preview;if(!fOrU)return;
+    var slot=results.length;results.push(null);
+    uploads.push(_uploadOnePhoto(fOrU,prefix+'APP_'+appId+'_'+i+'_'+Date.now()).then(function(u){if(u)results[slot]=u;}));
+  });
+  Promise.all(uploads).then(function(){
+    var urls=results.filter(Boolean);if(!urls.length)return;
+    var a=corpApplications.filter(function(x){return x.id===appId;})[0];
+    if(a){
+      a.photos=(a.photos||[]).concat(urls);
+      if(_fbReady&&_db){var _ps=JSON.parse(JSON.stringify(a));_db.collection('salty-corporate').doc('apps').collection('apps').doc(appId).set(_ps).catch(function(e){_dirty.apps[appId]=true;setTimeout(_pushToFirebase,1000);});}
+      _saveLS();toast('📷 '+urls.length+' photo(s) saved!');
+    }
+  });
+}
+function _queueLTAppPhotos(id){_queueAppPhotos(_ltPhotos,'LT',id);}
+function _queueInvAppPhotos(id){_queueAppPhotos(_invPhotos,'INV',id);}
+function _queueOrdAppPhotos(id){_queueAppPhotos(_ordPhotos,'ORD',id);}
+
+// ── Reusable photo section HTML ──────────────────────────────────────────
+function _photoSectionHtml(prefix,handlerFn,existingPhotos){
+  var h='<div class="fsec"><div class="fst">📷 Collateral Photos</div>';
+  h+='<div class="fg"><div class="uz" id="'+prefix+'_uz"><input type="file" accept="image/*" multiple onchange="'+handlerFn+'(this)"><div style="font-size:28px;margin-bottom:6px;">📷</div><div style="font-size:12px;color:var(--muted);">Tap to attach collateral photos</div></div>';
+  h+='<div id="'+prefix+'_prev">';
+  if(existingPhotos&&existingPhotos.length){existingPhotos.forEach(function(u){h+='<div class="fitm"><span>📷 Existing photo</span><a href="'+u+'" target="_blank" style="color:var(--gold);font-size:11px;">View</a></div>';});}
+  h+='</div></div></div>';
+  return h;
+}
+
+// ── Reusable photo display HTML (for view pages) ─────────────────────────
+function _photoDisplayHtml(photos){
+  if(!photos||!photos.length)return '';
+  var h='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📷 Collateral Photos ('+photos.length+')</span></div>';
+  h+='<div style="padding:14px;display:flex;flex-wrap:wrap;gap:10px;">';
+  photos.forEach(function(u){h+='<img src="'+u+'" style="height:100px;border-radius:8px;border:1px solid var(--border);cursor:pointer;object-fit:cover;" onclick="window.open(this.src,\'_blank\')">';});
+  h+='</div></div>';
+  return h;
+}
+
 var LT_TIERS=[{min:20000,max:50000,rate:0.067,svc:0.10},{min:51000,max:150000,rate:0.063,svc:0.10},{min:151000,max:250000,rate:0.053,svc:0.08},{min:251000,max:1000000,rate:0.05,svc:0.05}];
 var _ltEditId=null;
 function ltGetTier(a){for(var i=0;i<LT_TIERS.length;i++)if(a>=LT_TIERS[i].min&&a<=LT_TIERS[i].max)return LT_TIERS[i];return null;}
@@ -712,6 +788,7 @@ function ltToggleClientType(){
 }
 function openLTModal(editId){
   _ltEditId=editId||null;
+  _ltPhotos=[];
   var l=editId?longTermLoans.filter(function(x){return x.id===editId;})[0]:null;
   var e=document.getElementById('ltmod');if(e)e.remove();
   var ct=l?l.clientType||'individual':'individual';
@@ -859,6 +936,7 @@ function openLTModal(editId){
   h+='</div>';
 
   // ── Signatures ──
+  h+=_photoSectionHtml('lt','ltHandlePhotos',l?l.photos||[]:[]);
   h+='<div class="fsec"><div class="fst">✍️ Signatures</div><div class="fr3">';
   h+='<div class="fg"><label class="fl">Borrower Signature</label>'+_sigCanvas('lt_sig_client',l?l.clientSig||null:null)+'</div>';
   h+='<div class="fg"><label class="fl">Salty Enterprises Rep</label>'+_sigCanvas('lt_sig_rep',l?l.repSig||null:null)+'</div>';
@@ -1001,12 +1079,14 @@ function _doSaveLT(name,contact,loc,amt,mo,date,c,clientType){
   } else if(canDirectCreate()){
     obj.id='LT-'+Date.now();obj.payments=pmts;obj.status='active';obj.createdBy=cu.display;obj.createdAt=now_();
     longTermLoans.push(obj);_markDirty('lt',obj.id);logAct('LT loan — '+name+' — '+zmw(amt));
+    if(_ltPhotos.length)_uploadLTPhotos(obj.id);
     save();closeLTModal();toast('Loan application saved! 💼');renderLongTermLoans(document.getElementById('mainct'));
   } else {
     obj.id='APP-'+Date.now();obj.product='💼 Long Term Loan';obj.amount=amt;obj.status='pending';
     obj.submittedBy=cu.username;obj.submittedByName=cu.display;obj.createdAt=now_();
     obj.adminNote='';obj.decidedBy='';obj.decidedAt='';
     corpApplications.push(obj);
+    if(_ltPhotos.length)_queueLTAppPhotos(obj.id);
     if(_fbReady&&_db){var _lts=JSON.parse(JSON.stringify(obj));_db.collection('salty-corporate').doc('apps').collection('apps').doc(obj.id).set(_lts).catch(function(e){console.warn('LT app write failed:',e);_dirty.apps[obj.id]=true;setTimeout(_pushToFirebase,1000);});}
     logAct('Submitted LT application for '+name+' — awaiting admin approval');
     _saveLS();closeLTModal();toast('Application submitted for approval! ✓');buildNav();renderLongTermLoans(document.getElementById('mainct'));
@@ -1627,6 +1707,7 @@ function openInvModal(editId){
   h+='<div class="fg"><label class="fl">Zanaco Account Number</label><input class="fi" id="inv_con_bank" placeholder="Account number for deposits" value="'+esc(co.bankAccount||'')+'"></div>';
   h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="inv_notes" value="'+esc(l?l.notes||'':'')+'"></div>';
   h+='</div></div>';
+  h+=_photoSectionHtml('inv','invHandlePhotos',l?l.photos||[]:[]);
   h+='<div class="fsec"><div class="fst">✍️ Signatures</div><div class="fr3">';
   h+='<div class="fg"><label class="fl">Client / Applicant Signature</label>'+_sigCanvas('inv_sig_client',l?l.clientSig||null:null)+'</div>';
   h+='<div class="fg"><label class="fl">Salty Enterprises Rep Signature</label>'+_sigCanvas('inv_sig_rep',l?l.repSig||null:null)+'</div>';
@@ -1702,10 +1783,12 @@ function _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,co
     var _newInv={id:'INV-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,invoiceNumber:invno,invoiceDate:invdate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,netAmount:c.net,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,months:pmts,status:'active',notes:notes,createdBy:cu.display,createdAt:now_()};
     invoiceLoans.push(_newInv);_markDirty('inv',_newInv.id);
     logAct('Invoice — '+co+' — '+zmw(amt));
+    if(_invPhotos.length)_uploadInvPhotos(obj.id);
     save();closeInvModal();toast('Invoice loan saved! 📄');renderInvoiceLoans(document.getElementById('mainct'));
   } else {
     var appObj={id:'APP-'+Date.now(),type:'invoice',product:'📄 Invoice Discounting',clientName:co,companyName:co,directorName:dir,contact:contact,location:loc,invoiceNumber:invno,invoiceDate:invdate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,amount:amt,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,notes:notes,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
     corpApplications.push(appObj);
+    if(_invPhotos.length)_queueInvAppPhotos(appObj.id);
     if(_fbReady&&_db){var _invs=JSON.parse(JSON.stringify(appObj));_db.collection('salty-corporate').doc('apps').collection('apps').doc(appObj.id).set(_invs).catch(function(e){console.warn('Inv app write failed:',e);_dirty.apps[appObj.id]=true;setTimeout(_pushToFirebase,1000);});}
     logAct('Submitted invoice application — '+co+' — awaiting admin approval');
     _saveLS();closeInvModal();toast('Application submitted for approval! ✓');buildNav();renderInvoiceLoans(document.getElementById('mainct'));
@@ -1938,6 +2021,7 @@ function openOrdModal(editId){
   h+='<div class="fg"><label class="fl">Zanaco Account Number</label><input class="fi" id="ord_con_bank" placeholder="Account number for deposits" value="'+esc(co.bankAccount||'')+'"></div>';
   h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="ord_notes" value="'+esc(l?l.notes||'':'')+'"></div>';
   h+='</div></div>';
+  h+=_photoSectionHtml('ord','ordHandlePhotos',l?l.photos||[]:[]);
   h+='<div class="fsec"><div class="fst">✍️ Signatures</div><div class="fr3">';
   h+='<div class="fg"><label class="fl">Client / Applicant Signature</label>'+_sigCanvas('ord_sig_client',l?l.clientSig||null:null)+'</div>';
   h+='<div class="fg"><label class="fl">Salty Enterprises Rep Signature</label>'+_sigCanvas('ord_sig_rep',l?l.repSig||null:null)+'</div>';
@@ -2011,10 +2095,12 @@ function _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,co
     var _newOrd={id:'ORD-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,orderNumber:ordno,orderDate:orddate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,netAmount:c.net,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,months:pmts,status:'active',notes:notes,createdBy:cu.display,createdAt:now_()};
     orderLoans.push(_newOrd);_markDirty('ord',_newOrd.id);
     logAct('Order — '+co+' — '+zmw(amt));
+    if(_ordPhotos.length)_uploadOrdPhotos(obj.id);
     save();closeOrdModal();toast('Order loan saved! 📦');renderOrderLoans(document.getElementById('mainct'));
   } else {
     var appObj={id:'APP-'+Date.now(),type:'order',product:'📦 Order Financing',clientName:co,companyName:co,directorName:dir,contact:contact,location:loc,orderNumber:ordno,orderDate:orddate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,amount:amt,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,notes:notes,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
     corpApplications.push(appObj);
+    if(_ordPhotos.length)_queueOrdAppPhotos(appObj.id);
     if(_fbReady&&_db){var _ords=JSON.parse(JSON.stringify(appObj));_db.collection('salty-corporate').doc('apps').collection('apps').doc(appObj.id).set(_ords).catch(function(e){console.warn('Ord app write failed:',e);_dirty.apps[appObj.id]=true;setTimeout(_pushToFirebase,1000);});}
     logAct('Submitted order application — '+co+' — awaiting admin approval');
     _saveLS();closeOrdModal();toast('Application submitted for approval! ✓');buildNav();renderOrderLoans(document.getElementById('mainct'));
@@ -2725,7 +2811,8 @@ function decideApp(id,decision){
     _db.collection('salty-corporate').doc('apps').collection('apps').doc(a.id).set(_appSnap)
       .catch(function(e){console.warn('decideApp push failed, queuing:',e);_dirty.apps[a.id]=true;_pushToFirebase();});
   }
-  _saveLS();
+  // Push the new loan to Firebase (marked dirty above)
+  save();
   renderApprovals(document.getElementById('mainct'));buildNav();
 }
 
