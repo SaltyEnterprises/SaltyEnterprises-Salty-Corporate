@@ -178,8 +178,8 @@ var USERS={admin:{pass:'admin123',display:'Admin',role:'admin'},kitwe_finance:{p
 var RLABELS={admin:'Head Office Admin',finance_manager:'Finance Manager',kitwe_assist:'Kitwe Assistant'};
 var BRANCHES=['Kitwe','Nakadoli','Mufulira','Chingola','Chililabombwe','Luanshya','Ndola','Kalulushi','Lusaka'];
 var instantLoans=[],longTermLoans=[],invoiceLoans=[],orderLoans=[],salaryLoans=[],actLog=[],corpApplications=[];
-var _dirty={meta:false,il:{},lt:{},inv:{},ord:{},sal:{}};
-var _pendingDelete={il:{},lt:{},inv:{},ord:{},sal:{}};
+var _dirty={meta:false,il:{},lt:{},inv:{},ord:{},sal:{},apps:{}};
+var _pendingDelete={il:{},lt:{},inv:{},ord:{},sal:{},apps:{}};
 var _listening=false;
 function _markDirty(col,id){if(col==='meta'){_dirty.meta=true;return;}if(_dirty[col])_dirty[col][String(id)]=true;}
 function _saveDoc(col,id,data){
@@ -206,22 +206,42 @@ function canDirectCreate(){return canDo('admin');} // Only admin saves directly 
 function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
 function logAct(msg){actLog.unshift({msg:msg,user:cu?cu.display:'?',time:now_()});if(actLog.length>200)actLog.pop();}
 function _saveLS(){try{localStorage.setItem('salty_corp',JSON.stringify({instantLoans:instantLoans,longTermLoans:longTermLoans,invoiceLoans:invoiceLoans,orderLoans:orderLoans,salaryLoans:salaryLoans,actLog:actLog,BRANCHES:BRANCHES,USERS:USERS,corpApplications:corpApplications}));}catch(e){}}
-function saveData(){_saveLS();if(!_fbReady||!_db)return;if(_saveTimer)clearTimeout(_saveTimer);_saveTimer=setTimeout(_pushToFirebase,1500);}
+function saveData(){_saveLS();if(!_fbReady||!_db)return;if(_saveTimer)clearTimeout(_saveTimer);_saveTimer=setTimeout(_pushToFirebase,800);}
 function save(){saveData();}
+
+function _fbSet(ref,data){return ref.set(data);}
+function _fbDel(ref){return ref.delete();}
+
 function _pushToFirebase(){
-  if(!_fbReady||!_db)return;
+  if(!_fbReady||!_db){return;}
   if(_isSaving){_pendingSave=true;return;}
   _isSaving=true;
-  var batch=_db.batch();var batchCount=0;
-  function flushBatch(){if(batchCount===0)return;batch.commit().catch(function(e){console.warn('batch:',e);});batch=_db.batch();batchCount=0;}
-  function addOp(ref,data){batch.set(ref,data);if(++batchCount>=490)flushBatch();}
-  function delOp(ref){batch.delete(ref);if(++batchCount>=490)flushBatch();}
-  // Meta
+
+  var ops=[];      // promises
+  var onDone=[];   // functions to run AFTER all ops succeed
+
+  // ── Meta (no corpApplications) ──────────────────────────────────
   if(_dirty.meta){
-    addOp(_db.collection('salty-corporate').doc('meta'),{BRANCHES:BRANCHES,USERS:USERS,actLog:actLog.slice(0,100),corpApplications:corpApplications,CONC_LIMITS:CONC_LIMITS,ts:Date.now()});
-    _dirty.meta=false;
+    var _snap_meta=JSON.parse(JSON.stringify({BRANCHES:BRANCHES,USERS:USERS,
+      actLog:actLog.slice(0,100),CONC_LIMITS:CONC_LIMITS,ts:Date.now()}));
+    ops.push(_fbSet(_db.collection('salty-corporate').doc('meta'),_snap_meta));
+    (function(){ var f=function(){_dirty.meta=false;}; onDone.push(f); })();
   }
-  // Collections — write dirty, delete pending-delete
+
+  // ── apps subcollection ──────────────────────────────────────────
+  Object.keys(_dirty.apps).forEach(function(id){
+    var item=corpApplications.filter(function(x){return x.id===id;})[0];
+    if(!item)return;
+    var _snap=JSON.parse(JSON.stringify(item));
+    ops.push(_fbSet(_db.collection('salty-corporate').doc('apps').collection('apps').doc(id),_snap));
+    (function(i){ onDone.push(function(){delete _dirty.apps[i];}); })(id);
+  });
+  Object.keys(_pendingDelete.apps).forEach(function(id){
+    ops.push(_fbDel(_db.collection('salty-corporate').doc('apps').collection('apps').doc(id)));
+    (function(i){ onDone.push(function(){delete _pendingDelete.apps[i];}); })(id);
+  });
+
+  // ── Loan subcollections ─────────────────────────────────────────
   var colDefs=[
     {col:'il',arr:instantLoans,dirty:_dirty.il,del:_pendingDelete.il},
     {col:'lt',arr:longTermLoans,dirty:_dirty.lt,del:_pendingDelete.lt},
@@ -230,31 +250,37 @@ function _pushToFirebase(){
     {col:'sal',arr:salaryLoans,dirty:_dirty.sal,del:_pendingDelete.sal}
   ];
   colDefs.forEach(function(cd){
-    // Write dirty
     Object.keys(cd.dirty).forEach(function(id){
       var item=cd.arr.filter(function(x){return x.id===id;})[0];
-      if(item)addOp(_db.collection('salty-corporate').doc(cd.col).collection(cd.col).doc(id),item);
-      delete cd.dirty[id];
+      if(!item)return;
+      var _snap=JSON.parse(JSON.stringify(item));
+      ops.push(_fbSet(_db.collection('salty-corporate').doc(cd.col).collection(cd.col).doc(id),_snap));
+      (function(c,i){ onDone.push(function(){delete c[i];}); })(cd.dirty,id);
     });
-    // Delete pending
     Object.keys(cd.del).forEach(function(id){
-      delOp(_db.collection('salty-corporate').doc(cd.col).collection(cd.col).doc(id));
-      delete cd.del[id];
+      ops.push(_fbDel(_db.collection('salty-corporate').doc(cd.col).collection(cd.col).doc(id)));
+      (function(c,i){ onDone.push(function(){delete c[i];}); })(cd.del,id);
     });
   });
-  flushBatch();
-  batch.commit().then(function(){
+
+  if(ops.length===0){_isSaving=false;return;}
+
+  Promise.all(ops).then(function(){
+    onDone.forEach(function(fn){fn();});  // clear dirty ONLY after success
     _isSaving=false;
     if(_pendingSave){_pendingSave=false;_pushToFirebase();}
   }).catch(function(e){
     _isSaving=false;
-    console.error('Save error:',e);
-    toast('⚠️ Sync failed — check connection');
+    console.error('Firebase save error:',e);
+    toast('⚠️ Sync error — will retry');
+    // Do NOT clear dirty flags — retry on next action
+    setTimeout(function(){if(_fbReady&&_db)_pushToFirebase();},3000);
   });
 }
+
 function _loadFromFirebase(){
   if(!_fbReady||!_db)return;
-  var loaded={meta:false,il:false,lt:false,inv:false,ord:false,sal:false};
+  var loaded={meta:false,apps:false,il:false,lt:false,inv:false,ord:false,sal:false};
   function checkDone(){
     for(var k in loaded)if(!loaded[k])return;
     _saveLS();
@@ -262,88 +288,128 @@ function _loadFromFirebase(){
     console.log('✅ Firebase data loaded');
     _startListener();
   }
-  // Meta
+
+  // Meta (DOES NOT load corpApplications — those come from apps subcollection)
   _db.collection('salty-corporate').doc('meta').get().then(function(doc){
     if(doc.exists){var d=doc.data();
       if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;
       if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k))USERS[k]=d.USERS[k];}}
       if(d.actLog)actLog=d.actLog;
-      if(d.corpApplications)corpApplications=d.corpApplications;
       if(d.CONC_LIMITS)_loadConcLimits(d);
     }
     loaded.meta=true;checkDone();
   }).catch(function(e){console.warn('meta load:',e);loaded.meta=true;checkDone();});
-  // Subcollections — full replace so deleted items from localStorage are evicted
-  var colMap={il:function(a){instantLoans=a;},lt:function(a){longTermLoans=a;},inv:function(a){invoiceLoans=a;},ord:function(a){orderLoans=a;},sal:function(a){salaryLoans=a;}};
+
+  // Apps subcollection
+  _db.collection('salty-corporate').doc('apps').collection('apps').get().then(function(snap){
+    var arr=[];
+    snap.forEach(function(doc){arr.push(doc.data());});
+    if(arr.length>0){
+      // Use the subcollection as source of truth
+      corpApplications=arr;
+    } else {
+      // Subcollection is empty — attempt migration from meta.corpApplications
+      _db.collection('salty-corporate').doc('meta').get().then(function(mdoc){
+        if(mdoc.exists&&mdoc.data().corpApplications&&mdoc.data().corpApplications.length){
+          var legacy=mdoc.data().corpApplications;
+          corpApplications=legacy;
+          // Migrate each app to the subcollection
+          var migBatch=_db.batch();
+          legacy.forEach(function(app){
+            migBatch.set(_db.collection('salty-corporate').doc('apps').collection('apps').doc(app.id),app);
+          });
+          migBatch.commit().then(function(){
+            console.log('✅ Migrated',legacy.length,'apps to subcollection');
+          }).catch(function(e){console.warn('Migration failed:',e);});
+        }
+      }).catch(function(){});
+    }
+    loaded.apps=true;checkDone();
+  }).catch(function(e){console.warn('apps load:',e);loaded.apps=true;checkDone();});
+
+  // Loan subcollections — full replace evicts stale localStorage items
+  var colMap={
+    il:function(a){instantLoans=a;},
+    lt:function(a){longTermLoans=a;},
+    inv:function(a){invoiceLoans=a;},
+    ord:function(a){orderLoans=a;},
+    sal:function(a){salaryLoans=a;}
+  };
   Object.keys(colMap).forEach(function(col){
     _db.collection('salty-corporate').doc(col).collection(col).get().then(function(snap){
       var arr=[];
       snap.forEach(function(doc){arr.push(doc.data());});
-      colMap[col](arr);  // fully replace — evicts any stale localStorage items
+      colMap[col](arr);
       loaded[col]=true;checkDone();
     }).catch(function(e){console.warn(col+' load:',e);loaded[col]=true;checkDone();});
   });
 }
+
 function _startListener(){
   if(!_fbReady||!_db)return;
-  if(_listening)return;  // prevent duplicate listeners
+  if(_listening)return;
   _listening=true;
   function refresh(){_saveLS();if(cu&&!document.querySelector('.mo.op')&&window._currentTab)showTab(window._currentTab);}
-  // Meta listener
+
+  // Meta listener — DOES NOT touch corpApplications
   _db.collection('salty-corporate').doc('meta').onSnapshot(function(doc){
     if(!doc.exists)return;var d=doc.data();
     if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;
     if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k))USERS[k]=d.USERS[k];}}
     if(d.actLog)actLog=d.actLog;
-    if(d.corpApplications)corpApplications=d.corpApplications;
     if(d.CONC_LIMITS)_loadConcLimits(d);
     refresh();
   },function(e){console.warn('meta listener:',e);});
-  // Subcollection listeners — use FULL snapshot replacement so deletes always propagate
+
+  // Generic subcollection listener factory
   function makeListener(col,setter){
     var _firstSnap=true;
     _db.collection('salty-corporate').doc(col).collection(col).onSnapshot(function(snap){
       if(_firstSnap){
-        // Full replace on first snapshot — evicts any deleted/stale items
+        // First snapshot: full replace — evicts any stale data
         var arr=[];
         snap.forEach(function(doc){arr.push(doc.data());});
-        setter(arr);
+        setter(arr,null,'full',null);
         _firstSnap=false;
       } else {
-        // Incremental updates after first snapshot
         snap.docChanges().forEach(function(ch){
-          if(ch.type==='removed'){
-            setter(null,ch.doc.id,'remove');
-            return;
-          }
+          if(ch.type==='removed'){setter(null,ch.doc.id,'remove',null);return;}
           setter(null,null,'upsert',ch.doc.data());
         });
       }
       refresh();
     },function(e){console.warn(col+' listener:',e);});
   }
+
+  // Apps — fully managed via subcollection, never via meta
+  makeListener('apps',function(arr,id,op,item){
+    if(op==='full')corpApplications=arr;
+    else if(op==='remove')corpApplications=corpApplications.filter(function(x){return x.id!==id;});
+    else if(op==='upsert'){var i=corpApplications.findIndex(function(x){return x.id===item.id;});if(i>=0)corpApplications[i]=item;else corpApplications.push(item);}
+  });
+
   makeListener('il',function(arr,id,op,item){
-    if(arr)instantLoans=arr;
+    if(op==='full')instantLoans=arr;
     else if(op==='remove')instantLoans=instantLoans.filter(function(x){return x.id!==id;});
     else if(op==='upsert'){var i=instantLoans.findIndex(function(x){return x.id===item.id;});if(i>=0)instantLoans[i]=item;else instantLoans.push(item);}
   });
   makeListener('lt',function(arr,id,op,item){
-    if(arr)longTermLoans=arr;
+    if(op==='full')longTermLoans=arr;
     else if(op==='remove')longTermLoans=longTermLoans.filter(function(x){return x.id!==id;});
     else if(op==='upsert'){var i=longTermLoans.findIndex(function(x){return x.id===item.id;});if(i>=0)longTermLoans[i]=item;else longTermLoans.push(item);}
   });
   makeListener('inv',function(arr,id,op,item){
-    if(arr)invoiceLoans=arr;
+    if(op==='full')invoiceLoans=arr;
     else if(op==='remove')invoiceLoans=invoiceLoans.filter(function(x){return x.id!==id;});
     else if(op==='upsert'){var i=invoiceLoans.findIndex(function(x){return x.id===item.id;});if(i>=0)invoiceLoans[i]=item;else invoiceLoans.push(item);}
   });
   makeListener('ord',function(arr,id,op,item){
-    if(arr)orderLoans=arr;
+    if(op==='full')orderLoans=arr;
     else if(op==='remove')orderLoans=orderLoans.filter(function(x){return x.id!==id;});
     else if(op==='upsert'){var i=orderLoans.findIndex(function(x){return x.id===item.id;});if(i>=0)orderLoans[i]=item;else orderLoans.push(item);}
   });
   makeListener('sal',function(arr,id,op,item){
-    if(arr)salaryLoans=arr;
+    if(op==='full')salaryLoans=arr;
     else if(op==='remove')salaryLoans=salaryLoans.filter(function(x){return x.id!==id;});
     else if(op==='upsert'){var i=salaryLoans.findIndex(function(x){return x.id===item.id;});if(i>=0)salaryLoans[i]=item;else salaryLoans.push(item);}
   });
@@ -2567,10 +2633,23 @@ function viewFullApp(id){
 
 function deleteApp(id){
   var a=corpApplications.filter(function(x){return x.id===id;})[0];if(!a)return;
-  if(!confirm('Delete application for '+a.clientName+'?\nThis cannot be undone.'))return;
+  if(!confirm('Delete this application for '+a.clientName+'?\nThis cannot be undone.'))return;
+  // 1. Remove from local array immediately
   corpApplications=corpApplications.filter(function(x){return x.id!==id;});
+  // 2. Delete directly from Firestore apps subcollection (no meta involved)
+  if(_fbReady&&_db){
+    _db.collection('salty-corporate').doc('apps').collection('apps').doc(id).delete()
+      .then(function(){console.log('App deleted from Firebase:',id);})
+      .catch(function(e){
+        console.error('Delete failed, queuing retry:',e);
+        _pendingDelete.apps[id]=true;
+        _pushToFirebase();
+      });
+  }
+  // 3. Save localStorage
+  _saveLS();
   logAct('Deleted application — '+a.clientName+' — '+a.product);
-  save();toast('Application deleted.');
+  toast('Application deleted ✓');
   if(canDo('admin'))renderApprovals(document.getElementById('mainct'));
   else renderMyApplications(document.getElementById('mainct'));
   buildNav();
@@ -2625,7 +2704,14 @@ function decideApp(id,decision){
     toast('Application rejected.');
   }
 
-  save();renderApprovals(document.getElementById('mainct'));buildNav();
+  // Push app status change directly to Firestore apps subcollection
+  if(_fbReady&&_db){
+    var _appSnap=JSON.parse(JSON.stringify(a));
+    _db.collection('salty-corporate').doc('apps').collection('apps').doc(a.id).set(_appSnap)
+      .catch(function(e){console.warn('decideApp push failed, queuing:',e);_dirty.apps[a.id]=true;_pushToFirebase();});
+  }
+  _saveLS();
+  renderApprovals(document.getElementById('mainct'));buildNav();
 }
 
 function openAppModal(preProduct){
@@ -2681,9 +2767,15 @@ function submitApp(){
     status:'pending',submittedBy:cu.username,submittedByName:cu.display,
     createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''
   };
-  corpApplications.push(app);_markDirty('meta','');
+  corpApplications.push(app);
+  // Write directly to Firestore apps subcollection
+  if(_fbReady&&_db){
+    var _appSnap=JSON.parse(JSON.stringify(app));
+    _db.collection('salty-corporate').doc('apps').collection('apps').doc(app.id).set(_appSnap)
+      .catch(function(e){console.warn('submitApp push failed, queuing:',e);_dirty.apps[app.id]=true;_pushToFirebase();});
+  }
   logAct('Submitted application — '+client+' — '+product+' — '+zmw(amount));
-  save();closeAppModal();toast('Application submitted for admin approval!');
+  _saveLS();closeAppModal();toast('Application submitted for admin approval!');
   renderMyApplications(document.getElementById('mainct'));
   buildNav();
 }
@@ -2714,7 +2806,7 @@ buildNav=function(){
         document.getElementById('tbrole').textContent=RLABELS[cu.role]||cu.role;
         document.getElementById('tbuser').textContent=cu.display;
         buildNav();
-        try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k)&&k!=='admin')USERS[k]=d.USERS[k];}}if(d.corpApplications)corpApplications=d.corpApplications;}}catch(e){}
+        try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k)&&k!=='admin')USERS[k]=d.USERS[k];}}}}catch(e){}
         initFirebase();
         if(_fbReady)_loadFromFirebase();else setTimeout(function(){initFirebase();if(_fbReady)_loadFromFirebase();},2000);
         showHome();
