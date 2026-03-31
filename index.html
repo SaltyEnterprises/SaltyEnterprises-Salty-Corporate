@@ -179,6 +179,8 @@ var RLABELS={admin:'Head Office Admin',finance_manager:'Finance Manager',kitwe_a
 var BRANCHES=['Kitwe','Nakadoli','Mufulira','Chingola','Chililabombwe','Luanshya','Ndola','Kalulushi','Lusaka'];
 var instantLoans=[],longTermLoans=[],invoiceLoans=[],orderLoans=[],salaryLoans=[],actLog=[],corpApplications=[];
 var _dirty={meta:false,il:{},lt:{},inv:{},ord:{},sal:{}};
+var _pendingDelete={il:{},lt:{},inv:{},ord:{},sal:{}};
+var _listening=false;
 function _markDirty(col,id){if(col==='meta'){_dirty.meta=true;return;}if(_dirty[col])_dirty[col][String(id)]=true;}
 function _saveDoc(col,id,data){
   if(!_fbReady||!_db)return;
@@ -211,43 +213,36 @@ function _pushToFirebase(){
   if(_isSaving){_pendingSave=true;return;}
   _isSaving=true;
   var batch=_db.batch();var batchCount=0;
-  function flushBatch(){batch.commit().catch(function(e){console.warn('batch:',e);});batch=_db.batch();batchCount=0;}
+  function flushBatch(){if(batchCount===0)return;batch.commit().catch(function(e){console.warn('batch:',e);});batch=_db.batch();batchCount=0;}
   function addOp(ref,data){batch.set(ref,data);if(++batchCount>=490)flushBatch();}
+  function delOp(ref){batch.delete(ref);if(++batchCount>=490)flushBatch();}
   // Meta
   if(_dirty.meta){
     addOp(_db.collection('salty-corporate').doc('meta'),{BRANCHES:BRANCHES,USERS:USERS,actLog:actLog.slice(0,100),corpApplications:corpApplications,CONC_LIMITS:CONC_LIMITS,ts:Date.now()});
     _dirty.meta=false;
   }
-  // Instant Loans
-  Object.keys(_dirty.il).forEach(function(id){
-    var l=instantLoans.filter(function(x){return x.id===id;})[0];
-    if(l)addOp(_db.collection('salty-corporate').doc('il').collection('il').doc(id),l);
-    delete _dirty.il[id];
+  // Collections — write dirty, delete pending-delete
+  var colDefs=[
+    {col:'il',arr:instantLoans,dirty:_dirty.il,del:_pendingDelete.il},
+    {col:'lt',arr:longTermLoans,dirty:_dirty.lt,del:_pendingDelete.lt},
+    {col:'inv',arr:invoiceLoans,dirty:_dirty.inv,del:_pendingDelete.inv},
+    {col:'ord',arr:orderLoans,dirty:_dirty.ord,del:_pendingDelete.ord},
+    {col:'sal',arr:salaryLoans,dirty:_dirty.sal,del:_pendingDelete.sal}
+  ];
+  colDefs.forEach(function(cd){
+    // Write dirty
+    Object.keys(cd.dirty).forEach(function(id){
+      var item=cd.arr.filter(function(x){return x.id===id;})[0];
+      if(item)addOp(_db.collection('salty-corporate').doc(cd.col).collection(cd.col).doc(id),item);
+      delete cd.dirty[id];
+    });
+    // Delete pending
+    Object.keys(cd.del).forEach(function(id){
+      delOp(_db.collection('salty-corporate').doc(cd.col).collection(cd.col).doc(id));
+      delete cd.del[id];
+    });
   });
-  // Long Term Loans
-  Object.keys(_dirty.lt).forEach(function(id){
-    var l=longTermLoans.filter(function(x){return x.id===id;})[0];
-    if(l)addOp(_db.collection('salty-corporate').doc('lt').collection('lt').doc(id),l);
-    delete _dirty.lt[id];
-  });
-  // Invoice Loans
-  Object.keys(_dirty.inv).forEach(function(id){
-    var l=invoiceLoans.filter(function(x){return x.id===id;})[0];
-    if(l)addOp(_db.collection('salty-corporate').doc('inv').collection('inv').doc(id),l);
-    delete _dirty.inv[id];
-  });
-  // Order Loans
-  Object.keys(_dirty.ord).forEach(function(id){
-    var l=orderLoans.filter(function(x){return x.id===id;})[0];
-    if(l)addOp(_db.collection('salty-corporate').doc('ord').collection('ord').doc(id),l);
-    delete _dirty.ord[id];
-  });
-  // Salary Companies
-  Object.keys(_dirty.sal).forEach(function(id){
-    var l=salaryLoans.filter(function(x){return x.id===id;})[0];
-    if(l)addOp(_db.collection('salty-corporate').doc('sal').collection('sal').doc(id),l);
-    delete _dirty.sal[id];
-  });
+  flushBatch();
   batch.commit().then(function(){
     _isSaving=false;
     if(_pendingSave){_pendingSave=false;_pushToFirebase();}
@@ -264,10 +259,10 @@ function _loadFromFirebase(){
     for(var k in loaded)if(!loaded[k])return;
     _saveLS();
     if(cu&&window._currentTab)showTab(window._currentTab);
-    console.log('✅ Corporate data loaded');
+    console.log('✅ Firebase data loaded');
     _startListener();
   }
-  // Load meta
+  // Meta
   _db.collection('salty-corporate').doc('meta').get().then(function(doc){
     if(doc.exists){var d=doc.data();
       if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;
@@ -277,25 +272,22 @@ function _loadFromFirebase(){
       if(d.CONC_LIMITS)_loadConcLimits(d);
     }
     loaded.meta=true;checkDone();
-  }).catch(function(){loaded.meta=true;checkDone();});
-  // Load each subcollection
-  var colMap={il:instantLoans,lt:longTermLoans,inv:invoiceLoans,ord:orderLoans,sal:salaryLoans};
-  var arrMap={il:'instantLoans',lt:'longTermLoans',inv:'invoiceLoans',ord:'orderLoans',sal:'salaryLoans'};
-  ['il','lt','inv','ord','sal'].forEach(function(col){
+  }).catch(function(e){console.warn('meta load:',e);loaded.meta=true;checkDone();});
+  // Subcollections — full replace so deleted items from localStorage are evicted
+  var colMap={il:function(a){instantLoans=a;},lt:function(a){longTermLoans=a;},inv:function(a){invoiceLoans=a;},ord:function(a){orderLoans=a;},sal:function(a){salaryLoans=a;}};
+  Object.keys(colMap).forEach(function(col){
     _db.collection('salty-corporate').doc(col).collection(col).get().then(function(snap){
       var arr=[];
       snap.forEach(function(doc){arr.push(doc.data());});
-      if(col==='il')instantLoans=arr;
-      else if(col==='lt')longTermLoans=arr;
-      else if(col==='inv')invoiceLoans=arr;
-      else if(col==='ord')orderLoans=arr;
-      else if(col==='sal')salaryLoans=arr;
+      colMap[col](arr);  // fully replace — evicts any stale localStorage items
       loaded[col]=true;checkDone();
-    }).catch(function(){loaded[col]=true;checkDone();});
+    }).catch(function(e){console.warn(col+' load:',e);loaded[col]=true;checkDone();});
   });
 }
 function _startListener(){
   if(!_fbReady||!_db)return;
+  if(_listening)return;  // prevent duplicate listeners
+  _listening=true;
   function refresh(){_saveLS();if(cu&&!document.querySelector('.mo.op')&&window._currentTab)showTab(window._currentTab);}
   // Meta listener
   _db.collection('salty-corporate').doc('meta').onSnapshot(function(doc){
@@ -304,45 +296,59 @@ function _startListener(){
     if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k))USERS[k]=d.USERS[k];}}
     if(d.actLog)actLog=d.actLog;
     if(d.corpApplications)corpApplications=d.corpApplications;
+    if(d.CONC_LIMITS)_loadConcLimits(d);
     refresh();
   },function(e){console.warn('meta listener:',e);});
-  // Subcollection listeners
-  _db.collection('salty-corporate').doc('il').collection('il').onSnapshot(function(snap){
-    snap.docChanges().forEach(function(ch){
-      if(ch.type==='removed'){instantLoans=instantLoans.filter(function(x){return x.id!==ch.doc.id;});return;}
-      var r=ch.doc.data();var idx=instantLoans.findIndex(function(x){return x.id===r.id;});
-      if(idx>=0)instantLoans[idx]=r;else instantLoans.push(r);
-    });refresh();
-  },function(e){console.warn('il listener:',e);});
-  _db.collection('salty-corporate').doc('lt').collection('lt').onSnapshot(function(snap){
-    snap.docChanges().forEach(function(ch){
-      if(ch.type==='removed'){longTermLoans=longTermLoans.filter(function(x){return x.id!==ch.doc.id;});return;}
-      var r=ch.doc.data();var idx=longTermLoans.findIndex(function(x){return x.id===r.id;});
-      if(idx>=0)longTermLoans[idx]=r;else longTermLoans.push(r);
-    });refresh();
-  },function(e){console.warn('lt listener:',e);});
-  _db.collection('salty-corporate').doc('inv').collection('inv').onSnapshot(function(snap){
-    snap.docChanges().forEach(function(ch){
-      if(ch.type==='removed'){invoiceLoans=invoiceLoans.filter(function(x){return x.id!==ch.doc.id;});return;}
-      var r=ch.doc.data();var idx=invoiceLoans.findIndex(function(x){return x.id===r.id;});
-      if(idx>=0)invoiceLoans[idx]=r;else invoiceLoans.push(r);
-    });refresh();
-  },function(e){console.warn('inv listener:',e);});
-  _db.collection('salty-corporate').doc('ord').collection('ord').onSnapshot(function(snap){
-    snap.docChanges().forEach(function(ch){
-      if(ch.type==='removed'){orderLoans=orderLoans.filter(function(x){return x.id!==ch.doc.id;});return;}
-      var r=ch.doc.data();var idx=orderLoans.findIndex(function(x){return x.id===r.id;});
-      if(idx>=0)orderLoans[idx]=r;else orderLoans.push(r);
-    });refresh();
-  },function(e){console.warn('ord listener:',e);});
-  _db.collection('salty-corporate').doc('sal').collection('sal').onSnapshot(function(snap){
-    snap.docChanges().forEach(function(ch){
-      if(ch.type==='removed'){salaryLoans=salaryLoans.filter(function(x){return x.id!==ch.doc.id;});return;}
-      var r=ch.doc.data();var idx=salaryLoans.findIndex(function(x){return x.id===r.id;});
-      if(idx>=0)salaryLoans[idx]=r;else salaryLoans.push(r);
-    });refresh();
-  },function(e){console.warn('sal listener:',e);});
+  // Subcollection listeners — use FULL snapshot replacement so deletes always propagate
+  function makeListener(col,setter){
+    var _firstSnap=true;
+    _db.collection('salty-corporate').doc(col).collection(col).onSnapshot(function(snap){
+      if(_firstSnap){
+        // Full replace on first snapshot — evicts any deleted/stale items
+        var arr=[];
+        snap.forEach(function(doc){arr.push(doc.data());});
+        setter(arr);
+        _firstSnap=false;
+      } else {
+        // Incremental updates after first snapshot
+        snap.docChanges().forEach(function(ch){
+          if(ch.type==='removed'){
+            setter(null,ch.doc.id,'remove');
+            return;
+          }
+          setter(null,null,'upsert',ch.doc.data());
+        });
+      }
+      refresh();
+    },function(e){console.warn(col+' listener:',e);});
+  }
+  makeListener('il',function(arr,id,op,item){
+    if(arr)instantLoans=arr;
+    else if(op==='remove')instantLoans=instantLoans.filter(function(x){return x.id!==id;});
+    else if(op==='upsert'){var i=instantLoans.findIndex(function(x){return x.id===item.id;});if(i>=0)instantLoans[i]=item;else instantLoans.push(item);}
+  });
+  makeListener('lt',function(arr,id,op,item){
+    if(arr)longTermLoans=arr;
+    else if(op==='remove')longTermLoans=longTermLoans.filter(function(x){return x.id!==id;});
+    else if(op==='upsert'){var i=longTermLoans.findIndex(function(x){return x.id===item.id;});if(i>=0)longTermLoans[i]=item;else longTermLoans.push(item);}
+  });
+  makeListener('inv',function(arr,id,op,item){
+    if(arr)invoiceLoans=arr;
+    else if(op==='remove')invoiceLoans=invoiceLoans.filter(function(x){return x.id!==id;});
+    else if(op==='upsert'){var i=invoiceLoans.findIndex(function(x){return x.id===item.id;});if(i>=0)invoiceLoans[i]=item;else invoiceLoans.push(item);}
+  });
+  makeListener('ord',function(arr,id,op,item){
+    if(arr)orderLoans=arr;
+    else if(op==='remove')orderLoans=orderLoans.filter(function(x){return x.id!==id;});
+    else if(op==='upsert'){var i=orderLoans.findIndex(function(x){return x.id===item.id;});if(i>=0)orderLoans[i]=item;else orderLoans.push(item);}
+  });
+  makeListener('sal',function(arr,id,op,item){
+    if(arr)salaryLoans=arr;
+    else if(op==='remove')salaryLoans=salaryLoans.filter(function(x){return x.id!==id;});
+    else if(op==='upsert'){var i=salaryLoans.findIndex(function(x){return x.id===item.id;});if(i>=0)salaryLoans[i]=item;else salaryLoans.push(item);}
+  });
 }
+
 function _uploadOnePhoto(fileOrUrl,filename){return new Promise(function(resolve){try{var fd=new FormData();fd.append('upload_preset',CLOUDINARY_PRESET);fd.append('public_id',filename);fd.append('file',fileOrUrl);fetch('https://api.cloudinary.com/v1_1/'+CLOUDINARY_CLOUD+'/image/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){d.secure_url?resolve(d.secure_url):resolve(null);}).catch(function(){resolve(null);});}catch(e){resolve(null);}});}
 
 function openChangePassword(){
@@ -374,7 +380,7 @@ function showForgotMsg(){document.getElementById("lforg").style.display="block";
 
 function doLogin(){var u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;var user=USERS[u];if(!user||user.pass!==p){document.getElementById('lerr').style.display='block';return;}cu={username:u,display:user.display,role:user.role};try{sessionStorage.setItem('salty_corp_session',JSON.stringify({username:u,display:user.display,role:user.role}));}catch(e){}document.getElementById('lerr').style.display='none';document.getElementById('ls').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('app').style.flexDirection='column';document.getElementById('tbrole').textContent=RLABELS[cu.role]||cu.role;document.getElementById('tbuser').textContent=cu.display;buildNav();try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k)&&k!=='admin')USERS[k]=d.USERS[k];}}if(d.corpApplications)corpApplications=d.corpApplications;}}catch(e){} initFirebase();if(_fbReady)_loadFromFirebase();else setTimeout(function(){initFirebase();if(_fbReady)_loadFromFirebase();},2000);showHome();}
 function quickLogin(u,p){document.getElementById('lu').value=u;document.getElementById('lp').value=p;doLogin();}
-function doLogout(){cu=null;window._currentTab=null;try{sessionStorage.removeItem('salty_corp_session');}catch(e){}document.getElementById('app').style.display='none';document.getElementById('ls').style.display='flex';document.getElementById('lu').value='';document.getElementById('lp').value='';}
+function doLogout(){cu=null;window._currentTab=null;_listening=false;try{sessionStorage.removeItem('salty_corp_session');}catch(e){}document.getElementById('app').style.display='none';document.getElementById('ls').style.display='flex';document.getElementById('lu').value='';document.getElementById('lp').value='';}
 function buildNav(){
   var tabs=[];
   if(canDo('admin')){
@@ -578,7 +584,6 @@ function ltCalc(amt,months){var t=ltGetTier(amt);if(!t)return null;var svcAmt=Ma
 function ltStatus(l){if(l.status==='cleared')return 'cleared';if(l.status==='cancelled')return 'cancelled';var today=td_(),tp=0;for(var i=0;i<(l.payments||[]).length;i++)tp+=(l.payments[i].amountPaid||0);if(tp>=(l.totalDue-1))return 'cleared';for(var i=0;i<(l.payments||[]).length;i++){var p=l.payments[i];if(!p.amountPaid&&p.dueDate&&today>p.dueDate)return 'overdue';}return 'active';}
 function ltTotalPaid(l){var t=0;for(var i=0;i<(l.payments||[]).length;i++)t+=(l.payments[i].amountPaid||0);return t;}
 function ltBalance(l){return Math.max(0,Math.round(((l.totalDue||0)-ltTotalPaid(l))*100)/100);}
-function deleteLT(id){if(!confirm('Permanently delete this loan?'))return;longTermLoans=longTermLoans.filter(function(x){return x.id!==id;});if(_fbReady&&_db)_db.collection('salty-corporate').doc('lt').collection('lt').doc(id).delete().catch(function(e){console.warn(e);});logAct('Deleted LT loan '+id);save();toast('Loan deleted.');renderLongTermLoans(document.getElementById('mainct'));}
 function renderLongTermLoans(mc){
   var fs=window._ltFilter||'all';
   var stats={active:0,overdue:0,cleared:0,out:0,bal:0};
@@ -1459,7 +1464,6 @@ function invCalc(amt,months){
 }
 function invStatus(l){if(l.status==='cleared')return 'cleared';if(l.status==='cancelled')return 'cancelled';var today=td_();for(var i=0;i<(l.months||[]).length;i++){var m=l.months[i];if(!(m.amountPaid>=(m.amountDue-1))&&m.dueDate&&today>m.dueDate)return 'overdue';}return 'active';}
 function invBalance(l){var t=0;for(var i=0;i<(l.months||[]).length;i++)t+=Math.max(0,l.months[i].amountDue-(l.months[i].amountPaid||0));return t;}
-function deleteInv(id){if(!confirm('Permanently delete this invoice loan?'))return;invoiceLoans=invoiceLoans.filter(function(x){return x.id!==id;});if(_fbReady&&_db)_db.collection('salty-corporate').doc('inv').collection('inv').doc(id).delete().catch(function(e){console.warn(e);});logAct('Deleted invoice loan '+id);save();toast('Invoice loan deleted.');renderInvoiceLoans(document.getElementById('mainct'));}
 function renderInvoiceLoans(mc){
   var fs=window._invFilter||'all';
   var stats={active:0,overdue:0,cleared:0,out:0};
@@ -1772,7 +1776,6 @@ function ordCalc(amt,months){
   for(var m=1;m<=months;m++){bal=Math.round(bal*1.05*100)/100;schedule.push({month:m,amountDue:bal});}
   return {svc:svc,disb:adv,net:net,schedule:schedule};
 }
-function deleteOrd(id){if(!confirm('Permanently delete this order loan?'))return;orderLoans=orderLoans.filter(function(x){return x.id!==id;});if(_fbReady&&_db)_db.collection('salty-corporate').doc('ord').collection('ord').doc(id).delete().catch(function(e){console.warn(e);});logAct('Deleted order loan '+id);save();toast('Order loan deleted.');renderOrderLoans(document.getElementById('mainct'));}
 function renderOrderLoans(mc){
   var fs=window._ordFilter||'all';
   var stats={active:0,overdue:0,cleared:0,out:0};
@@ -2286,10 +2289,26 @@ function exportReport(){
 }
 
 // ===== DELETE FUNCTIONS =====
-function deleteIL(id){var l=instantLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('DELETE instant loan for '+l.clientName+'?\nThis cannot be undone.'))return;var _ilDel=instantLoans.filter(function(x){return x.id===id;})[0];if(_ilDel&&_fbReady&&_db)_db.collection('salty-corporate').doc('il').collection('il').doc(id).delete().catch(function(){});instantLoans=instantLoans.filter(function(x){return x.id!==id;});logAct('DELETED instant loan — '+l.clientName);save();toast('Deleted.');renderInstantLoans(document.getElementById('mainct'));}
-function deleteLT(id){var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('DELETE long term loan for '+l.clientName+'?\nThis cannot be undone.'))return;var _ltDel=longTermLoans.filter(function(x){return x.id===id;})[0];if(_ltDel&&_fbReady&&_db)_db.collection('salty-corporate').doc('lt').collection('lt').doc(id).delete().catch(function(){});longTermLoans=longTermLoans.filter(function(x){return x.id!==id;});logAct('DELETED LT loan — '+l.clientName);save();toast('Deleted.');renderLongTermLoans(document.getElementById('mainct'));}
-function deleteInv(id){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('DELETE invoice loan for '+l.companyName+'?\nThis cannot be undone.'))return;var _invDel=invoiceLoans.filter(function(x){return x.id===id;})[0];if(_invDel&&_fbReady&&_db)_db.collection('salty-corporate').doc('inv').collection('inv').doc(id).delete().catch(function(){});invoiceLoans=invoiceLoans.filter(function(x){return x.id!==id;});logAct('DELETED invoice — '+l.companyName);save();toast('Deleted.');renderInvoiceLoans(document.getElementById('mainct'));}
-function deleteOrd(id){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;if(!confirm('DELETE order loan for '+l.companyName+'?\nThis cannot be undone.'))return;var _ordDel=orderLoans.filter(function(x){return x.id===id;})[0];if(_ordDel&&_fbReady&&_db)_db.collection('salty-corporate').doc('ord').collection('ord').doc(id).delete().catch(function(){});orderLoans=orderLoans.filter(function(x){return x.id!==id;});logAct('DELETED order — '+l.companyName);save();toast('Deleted.');renderOrderLoans(document.getElementById('mainct'));}
+// ── Central delete helper ──────────────────────────────────────────────────
+function _deleteRecord(col,arr,id,label,renderFn){
+  if(!confirm('Permanently delete this record?\n'+label+'\nThis cannot be undone.'))return;
+  // 1. Remove from local array immediately
+  var map={il:function(a){instantLoans=a;},lt:function(a){longTermLoans=a;},inv:function(a){invoiceLoans=a;},ord:function(a){orderLoans=a;},sal:function(a){salaryLoans=a;}};
+  map[col](arr.filter(function(x){return x.id!==id;}));
+  // 2. Mark for deletion in Firebase (via _pushToFirebase) AND direct delete as safety net
+  _pendingDelete[col][id]=true;
+  if(_fbReady&&_db)_db.collection('salty-corporate').doc(col).collection(col).doc(id).delete().catch(function(e){console.warn('Direct delete failed, will retry via push:',e);});
+  // 3. Save localStorage only (no re-push of deleted item)
+  _saveLS();
+  if(_fbReady&&_db){if(_saveTimer)clearTimeout(_saveTimer);_saveTimer=setTimeout(_pushToFirebase,500);}
+  logAct('Deleted record '+col+' — '+id+' — '+label);
+  toast('Deleted ✓');
+  renderFn(document.getElementById('mainct'));
+}
+function deleteIL(id){var l=instantLoans.filter(function(x){return x.id===id;})[0];if(!l)return;_deleteRecord('il',instantLoans,id,l.clientName||id,renderInstantLoans);}
+function deleteLT(id){var l=longTermLoans.filter(function(x){return x.id===id;})[0];if(!l)return;_deleteRecord('lt',longTermLoans,id,l.clientName||id,renderLongTermLoans);}
+function deleteInv(id){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;_deleteRecord('inv',invoiceLoans,id,l.companyName||id,renderInvoiceLoans);}
+function deleteOrd(id){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;_deleteRecord('ord',orderLoans,id,l.companyName||id,renderOrderLoans);}
 
 // ===== ADMIN SETTINGS =====
 function renderSettings(mc){
