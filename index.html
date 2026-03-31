@@ -300,31 +300,42 @@ function _loadFromFirebase(){
     loaded.meta=true;checkDone();
   }).catch(function(e){console.warn('meta load:',e);loaded.meta=true;checkDone();});
 
-  // Apps subcollection
+  // Apps subcollection — load with one-time migration from legacy meta.corpApplications
   _db.collection('salty-corporate').doc('apps').collection('apps').get().then(function(snap){
     var arr=[];
     snap.forEach(function(doc){arr.push(doc.data());});
     if(arr.length>0){
-      // Use the subcollection as source of truth
+      // Subcollection has data — use it as source of truth
       corpApplications=arr;
+      loaded.apps=true;checkDone();
     } else {
-      // Subcollection is empty — attempt migration from meta.corpApplications
+      // Subcollection is empty — check migration flag before restoring from meta
       _db.collection('salty-corporate').doc('meta').get().then(function(mdoc){
-        if(mdoc.exists&&mdoc.data().corpApplications&&mdoc.data().corpApplications.length){
-          var legacy=mdoc.data().corpApplications;
+        var metaData=mdoc.exists?mdoc.data():{};
+        if(!metaData._appsMigrated && metaData.corpApplications && metaData.corpApplications.length){
+          // First time: migrate old meta.corpApplications to subcollection
+          var legacy=metaData.corpApplications;
           corpApplications=legacy;
-          // Migrate each app to the subcollection
           var migBatch=_db.batch();
           legacy.forEach(function(app){
             migBatch.set(_db.collection('salty-corporate').doc('apps').collection('apps').doc(app.id),app);
           });
+          // Set migration flag so we never restore from meta again
+          migBatch.update(_db.collection('salty-corporate').doc('meta'),{_appsMigrated:true});
           migBatch.commit().then(function(){
             console.log('✅ Migrated',legacy.length,'apps to subcollection');
-          }).catch(function(e){console.warn('Migration failed:',e);});
+          }).catch(function(e){
+            // If update fails (doc might not exist), try set with merge
+            _db.collection('salty-corporate').doc('meta').set({_appsMigrated:true},{merge:true}).catch(function(){});
+            console.warn('Migration flag failed:',e);
+          });
+        } else {
+          // Either already migrated (subcollection was intentionally emptied) or no legacy data
+          corpApplications=[];
         }
-      }).catch(function(){});
+        loaded.apps=true;checkDone();
+      }).catch(function(){corpApplications=[];loaded.apps=true;checkDone();});
     }
-    loaded.apps=true;checkDone();
   }).catch(function(e){console.warn('apps load:',e);loaded.apps=true;checkDone();});
 
   // Loan subcollections — full replace evicts stale localStorage items
@@ -444,7 +455,7 @@ function saveChangePassword(){
 }
 function showForgotMsg(){document.getElementById("lforg").style.display="block";document.getElementById("lerr").style.display="none";}
 
-function doLogin(){var u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;var user=USERS[u];if(!user||user.pass!==p){document.getElementById('lerr').style.display='block';return;}cu={username:u,display:user.display,role:user.role};try{sessionStorage.setItem('salty_corp_session',JSON.stringify({username:u,display:user.display,role:user.role}));}catch(e){}document.getElementById('lerr').style.display='none';document.getElementById('ls').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('app').style.flexDirection='column';document.getElementById('tbrole').textContent=RLABELS[cu.role]||cu.role;document.getElementById('tbuser').textContent=cu.display;buildNav();try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k)&&k!=='admin')USERS[k]=d.USERS[k];}}if(d.corpApplications)corpApplications=d.corpApplications;}}catch(e){} initFirebase();if(_fbReady)_loadFromFirebase();else setTimeout(function(){initFirebase();if(_fbReady)_loadFromFirebase();},2000);showHome();}
+function doLogin(){var u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;var user=USERS[u];if(!user||user.pass!==p){document.getElementById('lerr').style.display='block';return;}cu={username:u,display:user.display,role:user.role};try{sessionStorage.setItem('salty_corp_session',JSON.stringify({username:u,display:user.display,role:user.role}));}catch(e){}document.getElementById('lerr').style.display='none';document.getElementById('ls').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('app').style.flexDirection='column';document.getElementById('tbrole').textContent=RLABELS[cu.role]||cu.role;document.getElementById('tbuser').textContent=cu.display;buildNav();try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k)&&k!=='admin')USERS[k]=d.USERS[k];}}}}catch(e){} initFirebase();if(_fbReady)_loadFromFirebase();else setTimeout(function(){initFirebase();if(_fbReady)_loadFromFirebase();},2000);showHome();}
 function quickLogin(u,p){document.getElementById('lu').value=u;document.getElementById('lp').value=p;doLogin();}
 function doLogout(){cu=null;window._currentTab=null;_listening=false;try{sessionStorage.removeItem('salty_corp_session');}catch(e){}document.getElementById('app').style.display='none';document.getElementById('ls').style.display='flex';document.getElementById('lu').value='';document.getElementById('lp').value='';}
 function buildNav(){
@@ -595,9 +606,10 @@ function saveIL(){
     // Finance manager / kitwe_assist — route to approval queue
     var appObj={id:'APP-'+Date.now(),type:'instant',clientName:name,clientPhone:phone,nrc:(document.getElementById('il_nrc').value||'').trim(),branch:branch,location:loc,occupation:(document.getElementById('il_occ').value||'').trim(),collateral:col,amountGiven:amt,termWeeks:wks,dateGiven:date,dueDate:due,notes:(document.getElementById('il_notes').value||'').trim(),photos:[],product:'⚡ Instant Loan',amount:amt,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
     corpApplications.push(appObj);
+    if(_fbReady&&_db){var _ils=JSON.parse(JSON.stringify(appObj));_db.collection('salty-corporate').doc('apps').collection('apps').doc(appObj.id).set(_ils).catch(function(e){console.warn('IL app write failed:',e);_dirty.apps[appObj.id]=true;setTimeout(_pushToFirebase,1000);});}
     if(_ilPhotos.length)_queueILAppPhotos(appObj.id);
     logAct('Submitted instant loan application for '+name+' — awaiting admin approval');
-    save();closeILModal();toast('Application submitted for admin approval! ✓');renderInstantLoans(document.getElementById('mainct'));buildNav();
+    _saveLS();closeILModal();toast('Application submitted for admin approval! ✓');renderInstantLoans(document.getElementById('mainct'));buildNav();
   } else {
     save();closeILModal();toast('Instant loan saved!');renderInstantLoans(document.getElementById('mainct'));
   }
@@ -994,9 +1006,10 @@ function _doSaveLT(name,contact,loc,amt,mo,date,c,clientType){
     obj.id='APP-'+Date.now();obj.product='💼 Long Term Loan';obj.amount=amt;obj.status='pending';
     obj.submittedBy=cu.username;obj.submittedByName=cu.display;obj.createdAt=now_();
     obj.adminNote='';obj.decidedBy='';obj.decidedAt='';
-    corpApplications.push(obj);_markDirty('meta','');
+    corpApplications.push(obj);
+    if(_fbReady&&_db){var _lts=JSON.parse(JSON.stringify(obj));_db.collection('salty-corporate').doc('apps').collection('apps').doc(obj.id).set(_lts).catch(function(e){console.warn('LT app write failed:',e);_dirty.apps[obj.id]=true;setTimeout(_pushToFirebase,1000);});}
     logAct('Submitted LT application for '+name+' — awaiting admin approval');
-    save();closeLTModal();toast('Application submitted for approval! ✓');buildNav();renderLongTermLoans(document.getElementById('mainct'));
+    _saveLS();closeLTModal();toast('Application submitted for approval! ✓');buildNav();renderLongTermLoans(document.getElementById('mainct'));
   }
 }
 function ltView(id){
@@ -1692,9 +1705,10 @@ function _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,co
     save();closeInvModal();toast('Invoice loan saved! 📄');renderInvoiceLoans(document.getElementById('mainct'));
   } else {
     var appObj={id:'APP-'+Date.now(),type:'invoice',product:'📄 Invoice Discounting',clientName:co,companyName:co,directorName:dir,contact:contact,location:loc,invoiceNumber:invno,invoiceDate:invdate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,amount:amt,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,notes:notes,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
-    corpApplications.push(appObj);_markDirty('meta','');
+    corpApplications.push(appObj);
+    if(_fbReady&&_db){var _invs=JSON.parse(JSON.stringify(appObj));_db.collection('salty-corporate').doc('apps').collection('apps').doc(appObj.id).set(_invs).catch(function(e){console.warn('Inv app write failed:',e);_dirty.apps[appObj.id]=true;setTimeout(_pushToFirebase,1000);});}
     logAct('Submitted invoice application — '+co+' — awaiting admin approval');
-    save();closeInvModal();toast('Application submitted for approval! ✓');buildNav();renderInvoiceLoans(document.getElementById('mainct'));
+    _saveLS();closeInvModal();toast('Application submitted for approval! ✓');buildNav();renderInvoiceLoans(document.getElementById('mainct'));
   }
 }
 function invView(id){
@@ -2000,9 +2014,10 @@ function _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,co
     save();closeOrdModal();toast('Order loan saved! 📦');renderOrderLoans(document.getElementById('mainct'));
   } else {
     var appObj={id:'APP-'+Date.now(),type:'order',product:'📦 Order Financing',clientName:co,companyName:co,directorName:dir,contact:contact,location:loc,orderNumber:ordno,orderDate:orddate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,amount:amt,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,notes:notes,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
-    corpApplications.push(appObj);_markDirty('meta','');
+    corpApplications.push(appObj);
+    if(_fbReady&&_db){var _ords=JSON.parse(JSON.stringify(appObj));_db.collection('salty-corporate').doc('apps').collection('apps').doc(appObj.id).set(_ords).catch(function(e){console.warn('Ord app write failed:',e);_dirty.apps[appObj.id]=true;setTimeout(_pushToFirebase,1000);});}
     logAct('Submitted order application — '+co+' — awaiting admin approval');
-    save();closeOrdModal();toast('Application submitted for approval! ✓');buildNav();renderOrderLoans(document.getElementById('mainct'));
+    _saveLS();closeOrdModal();toast('Application submitted for approval! ✓');buildNav();renderOrderLoans(document.getElementById('mainct'));
   }
 }
 function ordView(id){
