@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.googleapis.com https://fonts.googleapis.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; font-src 'self' https://fonts.gstatic.com; frame-ancestors 'none';">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta name="referrer" content="no-referrer">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Salty Enterprises — Corporate Finance</title>
 <style>
@@ -148,7 +152,7 @@ textarea.fi{resize:vertical;}
     <div class="ls-title">Sign In</div>
     <div class="ls-sub">Access the Corporate Finance Portal</div>
     <div class="ls-field"><label class="ls-label">Username</label><input class="ls-input" id="lu" placeholder="Enter username" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <div class="ls-field"><label class="ls-label">Password</label><input class="ls-input" type="password" id="lp" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="ls-field"><label class="ls-label">Password</label><input class="ls-input" type="password" id="lp" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="ls-btn" onclick="doLogin()">Sign in →</button>
     <div style="text-align:center;margin-top:14px;"><a href="#" onclick="showForgotMsg()" style="font-size:12px;color:var(--muted);text-decoration:none;">Forgot password?</a></div>
     <div class="ls-err" id="lerr">Invalid username or password.</div>
@@ -176,6 +180,102 @@ var _db=null,_fbReady=false,_saveTimer=null,_isSaving=false,_pendingSave=false;
 function initFirebase(){try{if(typeof firebase==='undefined')return;if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);_db=firebase.firestore();_fbReady=true;console.log('Firebase ready');}catch(e){_fbReady=false;}}
 var USERS={admin:{pass:'admin123',display:'Admin',role:'admin'},kitwe_finance:{pass:'finance123',display:'Finance Manager',role:'finance_manager'},kitwe_assist:{pass:'assist123',display:'Kitwe Assistant',role:'kitwe_assist'}};
 var RLABELS={admin:'Head Office Admin',finance_manager:'Finance Manager',kitwe_assist:'Kitwe Assistant'};
+
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  SECURITY MODULE                                                      ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+// 1. SHA-256 password hashing using Web Crypto API
+async function _sha256(str){
+  if(!str)return '';
+  try{
+    var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(str)));
+    return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  }catch(e){return str;}
+}
+function _isHashed(s){return typeof s==='string'&&s.length===64&&/^[0-9a-f]+$/.test(s);}
+
+// 2. Brute-force / lockout protection
+var _loginAttempts=0,_loginLockedUntil=0,_MAX_ATTEMPTS=5,_LOCKOUT_MS=15*60*1000;
+function _checkLockout(){
+  if(Date.now()<_loginLockedUntil){
+    var mins=Math.ceil((_loginLockedUntil-Date.now())/60000);
+    var el=document.getElementById('lerr');
+    if(el){el.textContent='Too many failed attempts. Try again in '+mins+' minute'+(mins>1?'s':'')+'.';el.style.display='block';}
+    return true;
+  }
+  return false;
+}
+function _recordFail(){
+  _loginAttempts++;
+  var el=document.getElementById('lerr');
+  if(_loginAttempts>=_MAX_ATTEMPTS){
+    _loginLockedUntil=Date.now()+_LOCKOUT_MS;
+    _loginAttempts=0;
+    if(el){el.textContent='Locked for 15 minutes after '+_MAX_ATTEMPTS+' failed attempts.';el.style.display='block';}
+  } else {
+    var left=_MAX_ATTEMPTS-_loginAttempts;
+    if(el){el.textContent='Incorrect credentials. '+left+' attempt'+(left>1?'s':'')+' remaining.';el.style.display='block';}
+  }
+}
+
+// 3. Session idle timeout — auto-logout after 2 hours of inactivity
+var _idleTimer=null,_SESSION_TIMEOUT=2*60*60*1000;
+function _resetIdle(){
+  if(!cu)return;
+  if(_idleTimer)clearTimeout(_idleTimer);
+  _idleTimer=setTimeout(function(){
+    if(cu){toast('\u26a0\ufe0f Session expired \u2014 logged out for security.');setTimeout(doLogout,2500);}
+  },_SESSION_TIMEOUT);
+}
+['click','keydown','touchstart'].forEach(function(ev){
+  document.addEventListener(ev,_resetIdle,{passive:true});
+});
+
+// 4. Session integrity — verify role hasn't been tampered with in console
+function _verifySession(){
+  if(!cu)return false;
+  try{
+    var sess=JSON.parse(sessionStorage.getItem('salty_corp_session'));
+    if(!sess||sess.username!==cu.username||sess.role!==cu.role){doLogout();return false;}
+    if(!USERS[cu.username]||USERS[cu.username].role!==cu.role){doLogout();return false;}
+  }catch(e){doLogout();return false;}
+  return true;
+}
+
+// 5. Migrate plaintext passwords to SHA-256 on first run
+function _migratePasswords(){
+  var promises=[];var needsWrite=false;
+  Object.keys(USERS).forEach(function(k){
+    if(!_isHashed(USERS[k].pass)){
+      needsWrite=true;
+      var plain=USERS[k].pass;
+      promises.push(_sha256(plain).then(function(h){USERS[k].pass=h;}));
+    }
+  });
+  if(promises.length){
+    Promise.all(promises).then(function(){
+      _markDirty('meta','');
+      if(_fbReady&&_db)setTimeout(_pushToFirebase,2000);
+    });
+  }
+}
+
+// 6. Suppress debug console output in production
+(function(){
+  if(location.hostname!=='localhost'&&location.hostname!=='127.0.0.1'){
+    var n=function(){};
+    window.console={log:n,warn:n,info:n,debug:n,error:n,group:n,groupEnd:n};
+  }
+})();
+
+// 7. Clickjacking prevention
+if(window.top!==window.self){
+  try{window.top.location.replace(window.self.location.href);}catch(e){
+    document.body.style.display='none';
+  }
+}
+
 var BRANCHES=['Kitwe','Nakadoli','Mufulira','Chingola','Chililabombwe','Luanshya','Ndola','Kalulushi','Lusaka'];
 var instantLoans=[],longTermLoans=[],invoiceLoans=[],orderLoans=[],salaryLoans=[],actLog=[],corpApplications=[];
 var _dirty={meta:false,il:{},lt:{},inv:{},ord:{},sal:{},apps:{}};
@@ -432,30 +532,70 @@ function openChangePassword(){
   var e=document.getElementById('chpwdmod');if(e)e.remove();
   var h='<div class="mo op" id="chpwdmod"><div class="md" style="margin-top:10px;max-width:400px;">';
   h+='<div class="mtt">🔑 Change My Password</div>';
-  h+='<div class="fg"><label class="fl">Current Password *</label><input class="fi" type="password" id="cp_current" placeholder="Enter current password"></div>';
-  h+='<div class="fg"><label class="fl">New Password *</label><input class="fi" type="password" id="cp_new" placeholder="Enter new password"></div>';
-  h+='<div class="fg"><label class="fl">Confirm New Password *</label><input class="fi" type="password" id="cp_confirm" placeholder="Confirm new password"></div>';
+  h+='<div class="fg"><label class="fl">Current Password *</label><input class="fi" type="password" id="cp_current" autocomplete="current-password" placeholder="Enter current password"></div>';
+  h+='<div class="fg"><label class="fl">New Password *</label><input class="fi" type="password" id="cp_new" autocomplete="new-password" placeholder="Enter new password"></div>';
+  h+='<div class="fg"><label class="fl">Confirm New Password *</label><input class="fi" type="password" id="cp_confirm" autocomplete="new-password" placeholder="Confirm new password"></div>';
   h+='<div class="mft"><button class="btn bto" onclick="document.getElementById(\'chpwdmod\').remove()">Cancel</button><button class="btn btg" onclick="saveChangePassword()">Update Password</button></div>';
   h+='</div></div>';
   var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);
 }
 function saveChangePassword(){
-  var current=document.getElementById('cp_current').value;
-  var newpwd=document.getElementById('cp_new').value;
-  var confirm=document.getElementById('cp_confirm').value;
+  var current=document.getElementById('cp_current').value||'';
+  var newpwd=document.getElementById('cp_new').value||'';
+  var confirm=document.getElementById('cp_confirm').value||'';
   if(!current||!newpwd||!confirm){toast('Please fill all fields.');return;}
-  if(USERS[cu.username].pass!==current){toast('Current password is incorrect.');return;}
-  if(newpwd.length<4){toast('New password must be at least 4 characters.');return;}
-  if(newpwd!==confirm){toast('New passwords do not match.');return;}
-  USERS[cu.username].pass=newpwd;_markDirty('meta','');
-  save();
-  document.getElementById('chpwdmod').remove();
-  toast('Password updated successfully! ✓');
-  logAct('Changed own password');
+  if(newpwd.length<8){toast('Password must be at least 8 characters.');return;}
+  if(!/[A-Z]/.test(newpwd)&&!/[0-9]/.test(newpwd)){toast('Password must contain a number or uppercase letter.');return;}
+  if(newpwd!==confirm){toast('Passwords do not match.');return;}
+  var stored=USERS[cu.username].pass;
+  function _doUpdate(){
+    _sha256(newpwd).then(function(h){
+      USERS[cu.username].pass=h;_markDirty('meta','');save();
+      document.getElementById('chpwdmod').remove();
+      toast('Password updated! ✓');
+      logAct('Changed password');
+    });
+  }
+  if(_isHashed(stored)){
+    _sha256(current).then(function(h){if(h===stored){_doUpdate();}else{toast('Current password is incorrect.');}});
+  } else {
+    if(current!==stored){toast('Current password is incorrect.');return;}
+    _doUpdate();
+  }
 }
 function showForgotMsg(){document.getElementById("lforg").style.display="block";document.getElementById("lerr").style.display="none";}
 
-function doLogin(){var u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;var user=USERS[u];if(!user||user.pass!==p){document.getElementById('lerr').style.display='block';return;}cu={username:u,display:user.display,role:user.role};try{sessionStorage.setItem('salty_corp_session',JSON.stringify({username:u,display:user.display,role:user.role}));}catch(e){}document.getElementById('lerr').style.display='none';document.getElementById('ls').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('app').style.flexDirection='column';document.getElementById('tbrole').textContent=RLABELS[cu.role]||cu.role;document.getElementById('tbuser').textContent=cu.display;buildNav();try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k)&&k!=='admin')USERS[k]=d.USERS[k];}}}}catch(e){} initFirebase();if(_fbReady)_loadFromFirebase();else setTimeout(function(){initFirebase();if(_fbReady)_loadFromFirebase();},2000);showHome();}
+function doLogin(){
+  if(_checkLockout())return;
+  var u=(document.getElementById('lu').value||'').trim();
+  var p=document.getElementById('lp').value||'';
+  if(!u||!p){var _e=document.getElementById('lerr');if(_e){_e.textContent='Please enter your username and password.';_e.style.display='block';}return;}
+  var user=USERS[u];
+  if(!user){_recordFail();return;}
+  function _proceed(){
+    cu={username:u,display:user.display,role:user.role};
+    _loginAttempts=0;_loginLockedUntil=0;
+    _resetIdle();
+    try{sessionStorage.setItem('salty_corp_session',JSON.stringify({username:u,display:user.display,role:user.role,ts:Date.now()}));}catch(e){}
+    document.getElementById('lerr').style.display='none';
+    document.getElementById('ls').style.display='none';
+    document.getElementById('app').style.display='flex';
+    document.getElementById('app').style.flexDirection='column';
+    document.getElementById('tbrole').textContent=RLABELS[cu.role]||cu.role;
+    document.getElementById('tbuser').textContent=cu.display;
+    buildNav();
+    try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k)&&k!=='admin')USERS[k]=d.USERS[k];}}}}catch(e){}
+    initFirebase();_migratePasswords();
+    if(_fbReady)_loadFromFirebase();else setTimeout(function(){initFirebase();if(_fbReady)_loadFromFirebase();},2000);
+    showHome();
+  }
+  if(_isHashed(user.pass)){
+    _sha256(p).then(function(h){if(h===user.pass){_proceed();}else{_recordFail();}});
+  } else {
+    if(p!==user.pass){_recordFail();return;}
+    _sha256(p).then(function(h){user.pass=h;_markDirty('meta','');_proceed();});
+  }
+}
 function quickLogin(u,p){document.getElementById('lu').value=u;document.getElementById('lp').value=p;doLogin();}
 function doLogout(){cu=null;window._currentTab=null;_listening=false;try{sessionStorage.removeItem('salty_corp_session');}catch(e){}document.getElementById('app').style.display='none';document.getElementById('ls').style.display='flex';document.getElementById('lu').value='';document.getElementById('lp').value='';}
 function buildNav(){
@@ -471,7 +611,7 @@ function buildNav(){
   tabs.forEach(function(t){var b=document.createElement('button');b.className='tn';b.id='nt-'+t.id;b.textContent=t.label;b.onclick=function(){showTab(t.id);};nav.appendChild(b);});
 }
 function showHome(){showTab('dashboard');}
-function showTab(n){window._currentTab=n;document.querySelectorAll('.tn').forEach(function(b){b.classList.remove('ac');});var btn=document.getElementById('nt-'+n);if(btn)btn.classList.add('ac');var mc=document.getElementById('mainct');if(n==='dashboard')renderDashboard(mc);else if(n==='instantloans')renderInstantLoans(mc);else if(n==='longtermloans')renderLongTermLoans(mc);else if(n==='invoiceloans')renderInvoiceLoans(mc);else if(n==='orderloans')renderOrderLoans(mc);else if(n==='salaryloans')renderSalaryLoans(mc);else if(n==='reports')renderReports(mc);else if(n==='activity')renderActivity(mc);else if(n==='settings')renderSettings(mc);else if(n==='approvals')renderApprovals(mc);else if(n==='myapplications')renderMyApplications(mc);else if(n==='risk')renderConcentrationRisk(mc);}
+function showTab(n){if(cu&&!_verifySession())return;window._currentTab=n;document.querySelectorAll('.tn').forEach(function(b){b.classList.remove('ac');});var btn=document.getElementById('nt-'+n);if(btn)btn.classList.add('ac');var mc=document.getElementById('mainct');if(n==='dashboard')renderDashboard(mc);else if(n==='instantloans')renderInstantLoans(mc);else if(n==='longtermloans')renderLongTermLoans(mc);else if(n==='invoiceloans')renderInvoiceLoans(mc);else if(n==='orderloans')renderOrderLoans(mc);else if(n==='salaryloans')renderSalaryLoans(mc);else if(n==='reports')renderReports(mc);else if(n==='activity')renderActivity(mc);else if(n==='settings')renderSettings(mc);else if(n==='approvals')renderApprovals(mc);else if(n==='myapplications')renderMyApplications(mc);else if(n==='risk')renderConcentrationRisk(mc);}
 // ===== DASHBOARD =====
 function renderDashboard(mc){
   var activeIL=instantLoans.filter(function(l){return ilStatus(l)==='active';}).length;
@@ -2536,23 +2676,26 @@ function saveUser(editUsername){
   var pass=(document.getElementById('use_pass').value||'').trim();
   var role=document.getElementById('use_role').value;
   if(!display||!pass){toast('Please fill all fields.');return;}
-  if(editUsername){
-    USERS[editUsername].display=display;
-    USERS[editUsername].pass=pass;
-    USERS[editUsername].role=role;
-    _markDirty('meta','');
-    if(cu.username===editUsername){cu.display=display;cu.role=role;document.getElementById('tbuser').textContent=display;document.getElementById('tbrole').textContent=RLABELS[role]||role;}
-    logAct('Updated user account: '+editUsername);
-    toast('Account updated!');
-  } else {
-    var uname=(document.getElementById('use_uname').value||'').trim().toLowerCase().replace(/\s+/g,'_');
-    if(!uname){toast('Please enter a username.');return;}
-    if(USERS[uname]){toast('Username already exists.');return;}
-    USERS[uname]={pass:pass,display:display,role:role};_markDirty('meta','');
-    logAct('Added user account: '+uname);
-    toast('Account created! Username: '+uname);
-  }
-  save();closeUserModal();renderSettings(document.getElementById('mainct'));
+  if(pass.length<8){toast('Password must be at least 8 characters.');return;}
+  _sha256(pass).then(function(hashedPass){
+    if(editUsername){
+      USERS[editUsername].display=display;
+      USERS[editUsername].pass=hashedPass;
+      USERS[editUsername].role=role;
+      _markDirty('meta','');
+      if(cu.username===editUsername){cu.display=display;cu.role=role;document.getElementById('tbuser').textContent=display;document.getElementById('tbrole').textContent=RLABELS[role]||role;}
+      logAct('Updated user account: '+editUsername);
+      toast('Account updated!');
+    } else {
+      var uname=(document.getElementById('use_uname').value||'').trim().toLowerCase().replace(/\s+/g,'_');
+      if(!uname){toast('Please enter a username.');return;}
+      if(USERS[uname]){toast('Username already exists.');return;}
+      USERS[uname]={pass:hashedPass,display:display,role:role};_markDirty('meta','');
+      logAct('Added user account: '+uname);
+      toast('Account created! Username: '+uname);
+    }
+    save();closeUserModal();renderSettings(document.getElementById('mainct'));
+  });
 }
 function deleteUser(uname){
   if(!confirm('Delete account for '+uname+'?\nThis cannot be undone.'))return;
@@ -2909,7 +3052,7 @@ buildNav=function(){
         document.getElementById('tbuser').textContent=cu.display;
         buildNav();
         try{var raw=localStorage.getItem('salty_corp');if(raw){var d=JSON.parse(raw);if(d.instantLoans)instantLoans=d.instantLoans;if(d.longTermLoans)longTermLoans=d.longTermLoans;if(d.invoiceLoans)invoiceLoans=d.invoiceLoans;if(d.orderLoans)orderLoans=d.orderLoans;if(d.salaryLoans)salaryLoans=d.salaryLoans;if(d.actLog)actLog=d.actLog;if(d.BRANCHES&&d.BRANCHES.length)BRANCHES=d.BRANCHES;if(d.USERS){for(var k in d.USERS){if(d.USERS.hasOwnProperty(k)&&k!=='admin')USERS[k]=d.USERS[k];}}}}catch(e){}
-        initFirebase();
+        initFirebase();_migratePasswords();
         if(_fbReady)_loadFromFirebase();else setTimeout(function(){initFirebase();if(_fbReady)_loadFromFirebase();},2000);
         showHome();
       }
