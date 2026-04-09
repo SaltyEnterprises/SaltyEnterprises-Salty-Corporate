@@ -1315,6 +1315,7 @@ function ltView(id){
     h+='</tr>';
   });
   h+='</tbody></table></div></div>';
+  if(l.photos&&l.photos.length){h+=_photoDisplayHtml(l.photos);}
   mc.innerHTML=h;
 }
 function printLTApplication(id,l,templateMode){
@@ -1798,6 +1799,7 @@ function invToggleCollateral(){
 }
 function openInvModal(editId){
   _invEditId=editId||null;
+  _invPhotos=[];
   var l=editId?invoiceLoans.filter(function(x){return x.id===editId;})[0]:null;
   var e=document.getElementById('invmod');if(e)e.remove();
   var ct=l?l.collateralType||'vehicle':'vehicle';
@@ -1923,7 +1925,7 @@ function _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,co
     var _newInv={id:'INV-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,invoiceNumber:invno,invoiceDate:invdate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,netAmount:c.net,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,months:pmts,status:'active',notes:notes,createdBy:cu.display,createdAt:now_()};
     invoiceLoans.push(_newInv);_markDirty('inv',_newInv.id);
     logAct('Invoice — '+co+' — '+zmw(amt));
-    if(_invPhotos.length)_uploadInvPhotos(obj.id);
+    if(_invPhotos.length)_uploadInvPhotos(_newInv.id);
     save();closeInvModal();toast('Invoice loan saved! 📄');renderInvoiceLoans(document.getElementById('mainct'));
   } else {
     var appObj={id:'APP-'+Date.now(),type:'invoice',product:'📄 Invoice Discounting',clientName:co,companyName:co,directorName:dir,contact:contact,location:loc,invoiceNumber:invno,invoiceDate:invdate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,amount:amt,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,notes:notes,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
@@ -1990,6 +1992,7 @@ function invView(id){
     h+='</tr>';
   });
   h+='</tbody></table></div></div>';
+  if(l.photos&&l.photos.length){h+=_photoDisplayHtml(l.photos);}
   mc.innerHTML=h;
 }
 function printInvAgreement(id,l,templateMode){
@@ -2114,6 +2117,7 @@ function ordToggleCollateral(){
 }
 function openOrdModal(editId){
   _ordEditId=editId||null;
+  _ordPhotos=[];
   var l=editId?orderLoans.filter(function(x){return x.id===editId;})[0]:null;
   var e=document.getElementById('ordmod');if(e)e.remove();
   var ct=l?l.collateralType||'vehicle':'vehicle';
@@ -2235,7 +2239,7 @@ function _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,co
     var _newOrd={id:'ORD-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,orderNumber:ordno,orderDate:orddate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,netAmount:c.net,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,months:pmts,status:'active',notes:notes,createdBy:cu.display,createdAt:now_()};
     orderLoans.push(_newOrd);_markDirty('ord',_newOrd.id);
     logAct('Order — '+co+' — '+zmw(amt));
-    if(_ordPhotos.length)_uploadOrdPhotos(obj.id);
+    if(_ordPhotos.length)_uploadOrdPhotos(_newOrd.id);
     save();closeOrdModal();toast('Order loan saved! 📦');renderOrderLoans(document.getElementById('mainct'));
   } else {
     var appObj={id:'APP-'+Date.now(),type:'order',product:'📦 Order Financing',clientName:co,companyName:co,directorName:dir,contact:contact,location:loc,orderNumber:ordno,orderDate:orddate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,amount:amt,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,notes:notes,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
@@ -2300,6 +2304,7 @@ function ordView(id){
     h+='</tr>';
   });
   h+='</tbody></table></div></div>';
+  if(l.photos&&l.photos.length){h+=_photoDisplayHtml(l.photos);}
   mc.innerHTML=h;
 }
 function printOrdAgreement(id,l,templateMode){
@@ -2469,7 +2474,7 @@ function renderReports(mc){
 
   var h='<div class="pgh" style="background:linear-gradient(135deg,#0d0d0d,#1a1208);border:1px solid rgba(201,168,76,.2);">';
   h+='<div><div class="pgt">📊 Reports</div><div class="pgs">'+periodLabel+(range.from?' · '+fmtD(range.from)+' to '+fmtD(range.to):'')+'</div></div>';
-  h+='<div style="display:flex;gap:8px;"><button class="btn btg" onclick="exportReport()">⬇ Export CSV</button><button class="btn bto" onclick="window.print()">🖨 Print</button></div></div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btg" onclick="exportReport()">⬇ Export CSV</button><button class="btn bto" onclick="exportClientList()">📋 Export Clients</button><button class="btn bto" onclick="openImportModal()" style="border-color:var(--ok2);color:var(--ok2);">📥 Import from Excel</button><button class="btn bto" onclick="window.print()">🖨 Print</button></div></div>';
 
   // Period selector
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">';
@@ -2595,6 +2600,178 @@ function exportReport(){
   var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='salty_corporate_'+period+'_'+today+'.csv';a.click();URL.revokeObjectURL(a.href);toast('Report exported!');
 }
 
+// ===== EXPORT CLIENT LIST (for re-importing or backup) =====
+function exportClientList(){
+  var rows=[['TYPE','CLIENT NAME','CONTACT','AMOUNT','DATE','STATUS','PRODUCT','NOTES']];
+  instantLoans.forEach(function(l){rows.push(['Instant Loan',l.clientName||'',l.clientPhone||'',l.amountGiven||0,l.dateGiven||'',ilStatus(l),'Instant Loan',l.notes||'']);});
+  longTermLoans.forEach(function(l){rows.push(['Long Term Loan',l.clientName||'',l.contact||'',l.amountGiven||0,l.dateGiven||'',ltStatus(l),'Long Term Loan',l.notes||'']);});
+  invoiceLoans.forEach(function(l){rows.push(['Invoice Discounting',l.companyName||'',l.contact||'',l.amountGiven||0,l.dateGiven||'',invStatus(l),'Invoice Discounting',l.notes||'']);});
+  orderLoans.forEach(function(l){rows.push(['Order Financing',l.companyName||'',l.contact||'',l.amountGiven||0,l.dateGiven||'',(invStatus({status:l.status,months:l.months})),'Order Financing',l.notes||'']);});
+  salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){rows.push(['Salary Advance',e.employeeName||'',co.contact||'',e.amountGiven||0,e.dateGiven||'',empStatus(e),'Salary Advance - '+co.companyName,e.notes||'']);});});
+  var csv=rows.map(function(r){return r.map(function(v){var s=String(v===null||v===undefined?'':v);if(s.indexOf(',')>=0||s.indexOf('"')>=0)s='"'+s.replace(/"/g,'""')+'"';return s;}).join(',');}).join('\r\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='salty_clients_'+td_()+'.csv';a.click();URL.revokeObjectURL(a.href);toast('Client list exported!');
+}
+
+// ===== IMPORT CLIENTS FROM EXCEL/CSV =====
+function openImportModal(){
+  if(!canDo('admin')){toast('Admin only.');return;}
+  var e=document.getElementById('importmod');if(e)e.remove();
+  var h='<div class="mo op" id="importmod"><div class="md mlg" style="margin-top:10px;max-width:720px;">';
+  h+='<div class="mtt">📥 Import Clients from Excel / CSV</div>';
+  h+='<div style="background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;line-height:1.8;">';
+  h+='<strong>How to import:</strong><br>';
+  h+='1. Export your existing client list from Excel/CSV<br>';
+  h+='2. Make sure your file has these columns in row 1: <strong>Name, Contact, Amount, Date, Product, Notes</strong><br>';
+  h+='3. Product must be one of: <em>Instant Loan, Long Term Loan, Invoice Discounting, Order Financing, Salary Advance</em><br>';
+  h+='4. Date format: <strong>YYYY-MM-DD</strong> (e.g. 2024-01-15)<br>';
+  h+='5. Imported clients go directly into the system as active loans<br>';
+  h+='<br><a href="#" onclick="downloadImportTemplate();return false;" style="color:var(--gold);">📄 Download import template</a>';
+  h+='</div>';
+  h+='<div class="fg"><label class="fl">Select CSV or Excel file</label>';
+  h+='<input type="file" id="import_file" accept=".csv,.xlsx,.xls" class="fi" onchange="previewImport(this)" style="padding:10px;">';
+  h+='</div>';
+  h+='<div id="import_preview" style="margin-top:12px;"></div>';
+  h+='<div class="mft"><button class="btn bto" onclick="document.getElementById(\'importmod\').remove()">Cancel</button>';
+  h+='<button class="btn btg" id="import_btn" onclick="runImport()" style="display:none;">📥 Import Clients</button></div>';
+  h+='</div></div>';
+  var d=document.createElement('div');d.innerHTML=h;document.body.appendChild(d.firstChild);
+}
+
+function downloadImportTemplate(){
+  var csv='Name,Contact,Amount,Date,Product,Notes\n';
+  csv+='John Banda,0977123456,5000,2024-01-15,Instant Loan,Collateral: Toyota\n';
+  csv+='ABC Company Ltd,0966234567,50000,2024-01-20,Long Term Loan,Business expansion\n';
+  csv+='XYZ Suppliers,0955345678,100000,2024-02-01,Invoice Discounting,Inv#INV-001\n';
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='salty_import_template.csv';a.click();URL.revokeObjectURL(a.href);
+}
+
+var _importRows=[];
+function previewImport(input){
+  var file=input.files[0];if(!file)return;
+  var preview=document.getElementById('import_preview');
+  var btn=document.getElementById('import_btn');
+  preview.innerHTML='<div style="color:var(--muted);font-size:12px;">Reading file...</div>';
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var text=e.target.result;
+    // Parse CSV
+    var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});
+    if(lines.length<2){preview.innerHTML='<div style="color:var(--red2);">File appears empty or has only headers.</div>';return;}
+    // Get headers from first row
+    var headers=_parseCSVLine(lines[0]).map(function(h){return h.trim().toLowerCase();});
+    var nameIdx=headers.indexOf('name');
+    var contactIdx=headers.indexOf('contact');
+    var amtIdx=headers.indexOf('amount');
+    var dateIdx=headers.indexOf('date');
+    var productIdx=headers.indexOf('product');
+    var notesIdx=headers.indexOf('notes');
+    if(nameIdx<0||amtIdx<0){
+      preview.innerHTML='<div style="color:var(--red2);">❌ Missing required columns. File must have: Name, Amount</div>';
+      return;
+    }
+    _importRows=[];
+    var errors=[];
+    for(var i=1;i<lines.length;i++){
+      var cols=_parseCSVLine(lines[i]);
+      if(!cols.length||!cols[0])continue;
+      var name=(nameIdx>=0?cols[nameIdx]||'':'').trim();
+      var contact=(contactIdx>=0?cols[contactIdx]||'':'').trim();
+      var amt=parseFloat((amtIdx>=0?cols[amtIdx]||'0':'0').replace(/[^0-9.]/g,''))||0;
+      var date=(dateIdx>=0?cols[dateIdx]||td_():td_()).trim();
+      var product=(productIdx>=0?cols[productIdx]||'Instant Loan':'Instant Loan').trim();
+      var notes=(notesIdx>=0?cols[notesIdx]||'':'').trim();
+      if(!name){errors.push('Row '+(i+1)+': missing name');continue;}
+      if(amt<=0){errors.push('Row '+(i+1)+': invalid amount');continue;}
+      // Validate date format
+      if(date&&!/^\d{4}-\d{2}-\d{2}$/.test(date)){
+        // Try to parse common formats
+        var d=new Date(date);
+        if(!isNaN(d.getTime()))date=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+        else{errors.push('Row '+(i+1)+': invalid date format (use YYYY-MM-DD)');continue;}
+      }
+      _importRows.push({name:name,contact:contact,amt:amt,date:date||td_(),product:product,notes:notes});
+    }
+    // Show preview
+    var h2='';
+    if(errors.length)h2+='<div style="background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.2);border-radius:8px;padding:10px;margin-bottom:10px;font-size:11px;color:var(--red2);"><strong>⚠ '+errors.length+' row(s) skipped:</strong><br>'+errors.join('<br>')+'</div>';
+    if(_importRows.length){
+      h2+='<div style="font-size:12px;color:var(--ok2);margin-bottom:8px;">✓ '+_importRows.length+' client(s) ready to import</div>';
+      h2+='<div class="tw"><table><thead><tr><th>Name</th><th>Contact</th><th>Amount</th><th>Date</th><th>Product</th><th>Notes</th></tr></thead><tbody>';
+      _importRows.slice(0,20).forEach(function(r){
+        h2+='<tr><td><strong>'+esc(r.name)+'</strong></td><td>'+esc(r.contact)+'</td><td style="font-family:monospace;">'+zmw(r.amt)+'</td><td>'+fmtD(r.date)+'</td><td style="font-size:11px;">'+esc(r.product)+'</td><td style="font-size:11px;color:var(--muted);">'+esc(r.notes.substring(0,30))+'</td></tr>';
+      });
+      if(_importRows.length>20)h2+='<tr><td colspan="6" style="text-align:center;color:var(--muted);font-size:11px;">...and '+(_importRows.length-20)+' more</td></tr>';
+      h2+='</tbody></table></div>';
+      if(btn)btn.style.display='';
+    } else {
+      h2+='<div style="color:var(--red2);">No valid rows found to import.</div>';
+      if(btn)btn.style.display='none';
+    }
+    preview.innerHTML=h2;
+  };
+  reader.readAsText(file);
+}
+
+function _parseCSVLine(line){
+  var result=[],cur='',inQ=false;
+  for(var i=0;i<line.length;i++){
+    var c=line[i];
+    if(c==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}
+    else if(c===','&&!inQ){result.push(cur);cur='';}
+    else cur+=c;
+  }
+  result.push(cur);
+  return result;
+}
+
+function runImport(){
+  if(!_importRows.length){toast('No rows to import.');return;}
+  if(!confirm('Import '+_importRows.length+' client(s) into the system?\n\nAll imports will be created as active loans.'))return;
+  var imported=0,skipped=0;
+  var today=td_();
+  _importRows.forEach(function(r){
+    var prod=r.product.toLowerCase();
+    try{
+      if(prod.indexOf('instant')>=0){
+        var wks=1;
+        var due=ilDueDate(r.date,wks);
+        var nl={id:'IL-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),clientName:r.name,clientPhone:r.contact,nrc:'',branch:'Kitwe',location:'',occupation:'',collateral:'',amountGiven:r.amt,termWeeks:wks,dateGiven:r.date,dueDate:due,status:'active',notes:r.notes,createdBy:cu.display+' (imported)',createdAt:now_(),weeksUsed:null,settledDate:null,settledAmount:null,photos:[]};
+        instantLoans.push(nl);_markDirty('il',nl.id);imported++;
+      } else if(prod.indexOf('long')>=0||prod.indexOf('lt')>=0){
+        var c=ltCalc(r.amt,12)||ltCalc(r.amt,1)||{monthly:r.amt,totalDue:r.amt,svcAmt:0,disb:r.amt,intTotal:0,tier:{rate:0.067}};
+        var pmts=[];for(var m=1;m<=12;m++)pmts.push({month:m,dueDate:ltMonthDate(r.date,m),amountDue:c.monthly,amountPaid:0,datePaid:null});
+        var nl2={id:'LT-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),clientName:r.name,clientType:'individual',contact:r.contact,location:'',amountGiven:r.amt,termMonths:12,dateGiven:r.date,serviceCharge:c.svcAmt||0,disbursedAmount:c.disb||r.amt,interestRate:c.tier?c.tier.rate:0.067,monthlyPayment:c.monthly||r.amt,totalDue:c.totalDue||r.amt,payments:pmts,status:'active',notes:r.notes,createdBy:cu.display+' (imported)',createdAt:now_(),collateralItems:[],photos:[]};
+        longTermLoans.push(nl2);_markDirty('lt',nl2.id);imported++;
+      } else if(prod.indexOf('invoice')>=0||prod.indexOf('inv')>=0){
+        var c2=invCalc(r.amt,3);
+        var pmts2=[];for(var mx=0;mx<3;mx++)pmts2.push({month:mx+1,dueDate:ltMonthDate(r.date,mx+1),amountDue:c2.schedule[mx].amountDue,amountPaid:0,datePaid:null});
+        var nl3={id:'INV-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),companyName:r.name,directorName:'',contact:r.contact,location:'',invoiceNumber:'',invoiceDate:r.date,debtor:'',amountGiven:r.amt,accountNumber:'',termMonths:3,dateGiven:r.date,serviceCharge:c2.svc,disbursedAmount:c2.disb,netAmount:c2.net,collateralType:'vehicle',months:pmts2,status:'active',notes:r.notes,createdBy:cu.display+' (imported)',createdAt:now_(),photos:[]};
+        invoiceLoans.push(nl3);_markDirty('inv',nl3.id);imported++;
+      } else if(prod.indexOf('order')>=0||prod.indexOf('ord')>=0){
+        var c3=ordCalc(r.amt,3);
+        var pmts3=[];for(var mx=0;mx<3;mx++)pmts3.push({month:mx+1,dueDate:ltMonthDate(r.date,mx+1),amountDue:c3.schedule[mx].amountDue,amountPaid:0,datePaid:null});
+        var nl4={id:'ORD-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),companyName:r.name,directorName:'',contact:r.contact,location:'',orderNumber:'',orderDate:r.date,debtor:'',amountGiven:r.amt,accountNumber:'',termMonths:3,dateGiven:r.date,serviceCharge:c3.svc,disbursedAmount:c3.disb,netAmount:c3.net,collateralType:'vehicle',months:pmts3,status:'active',notes:r.notes,createdBy:cu.display+' (imported)',createdAt:now_(),photos:[]};
+        orderLoans.push(nl4);_markDirty('ord',nl4.id);imported++;
+      } else if(prod.indexOf('salary')>=0||prod.indexOf('sal')>=0){
+        // Find or create company
+        var coName=r.name.indexOf('-')>=0?r.name.split('-')[0].trim():r.name;
+        var empName=r.name.indexOf('-')>=0?r.name.split('-')[1].trim():r.name;
+        var co=salaryLoans.filter(function(x){return x.companyName===coName;})[0];
+        if(!co){co={id:'SAL-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),companyName:coName,contact:r.contact,phone:r.contact,mouSigned:false,employees:[],createdBy:cu.display+' (imported)',createdAt:now_()};salaryLoans.push(co);_markDirty('sal',co.id);}
+        var c4=salCalcEmp?salCalcEmp(r.amt,6):{monthly:r.amt/6,totalDue:r.amt,svc:0,disb:r.amt,intTotal:0,commission:0};
+        var pmts4=[];for(var m=1;m<=6;m++)pmts4.push({month:m,dueDate:ltMonthDate(r.date,m),amountDue:c4.monthly||r.amt/6,amountPaid:0,datePaid:null});
+        var emp={id:'EMP-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),employeeName:empName,contact:r.contact,location:'',amountGiven:r.amt,termMonths:6,dateGiven:r.date,serviceCharge:c4.svc||0,disbursedAmount:c4.disb||r.amt,monthlyPayment:c4.monthly||r.amt/6,totalDue:c4.totalDue||r.amt,totalInterest:c4.intTotal||0,commission:c4.commission||0,payments:pmts4,status:'active',notes:r.notes,createdBy:cu.display+' (imported)',createdAt:now_()};
+        co.employees.push(emp);_markDirty('sal',co.id);imported++;
+      } else {skipped++;}
+    }catch(err){console.error('Import row error:',err);skipped++;}
+  });
+  logAct('Imported '+imported+' clients from Excel/CSV'+(skipped?' ('+skipped+' skipped)':''));
+  save();
+  document.getElementById('importmod').remove();
+  toast('✓ Imported '+imported+' client'+(imported>1?'s':'')+' successfully!'+(skipped?' '+skipped+' skipped.':''));
+  renderReports(document.getElementById('mainct'));
+}
 // ===== DELETE FUNCTIONS =====
 // ── Central delete helper ──────────────────────────────────────────────────
 function _deleteRecord(col,arr,id,label,renderFn){
