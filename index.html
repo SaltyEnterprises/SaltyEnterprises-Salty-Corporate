@@ -264,8 +264,9 @@ function _migratePasswords(){
 // 6. Suppress debug console output in production
 (function(){
   if(location.hostname!=='localhost'&&location.hostname!=='127.0.0.1'){
+    window._origConsoleError=console.error;
     var n=function(){};
-    window.console={log:n,warn:n,info:n,debug:n,error:n,group:n,groupEnd:n};
+    window.console={log:n,warn:n,info:n,debug:n,error:window._origConsoleError||console.error,group:n,groupEnd:n};
   }
 })();
 
@@ -872,7 +873,7 @@ function _photoDisplayHtml(photos){
 
 var LT_TIERS=[{min:20000,max:50000,rate:0.067,svc:0.10},{min:51000,max:150000,rate:0.063,svc:0.10},{min:151000,max:250000,rate:0.053,svc:0.08},{min:251000,max:1000000,rate:0.05,svc:0.05}];
 var _ltEditId=null;
-function ltGetTier(a){for(var i=0;i<LT_TIERS.length;i++)if(a>=LT_TIERS[i].min&&a<=LT_TIERS[i].max)return LT_TIERS[i];return null;}
+function ltGetTier(a){for(var i=0;i<LT_TIERS.length;i++)if(a>=LT_TIERS[i].min&&a<=LT_TIERS[i].max)return LT_TIERS[i];if(a>0&&a<LT_TIERS[0].min)return LT_TIERS[0];if(a>LT_TIERS[LT_TIERS.length-1].max)return LT_TIERS[LT_TIERS.length-1];return null;}
 function ltMonthDate(dg,m){var d=new Date(dg+'T00:00:00');d.setMonth(d.getMonth()+m);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
 function ltCalc(amt,months){var t=ltGetTier(amt);if(!t)return null;var svcAmt=Math.round(amt*t.svc*100)/100,disb=Math.round((amt-svcAmt)*100)/100,intTotal=Math.round(amt*t.rate*months*100)/100,totalDue=Math.round((amt+intTotal)*100)/100,monthly=Math.round(totalDue/months*100)/100;return {tier:t,svcAmt:svcAmt,disb:disb,intTotal:intTotal,totalDue:totalDue,monthly:monthly};}
 function ltStatus(l){if(l.status==='cleared')return 'cleared';if(l.status==='cancelled')return 'cancelled';var today=td_(),tp=0;for(var i=0;i<(l.payments||[]).length;i++)tp+=(l.payments[i].amountPaid||0);if(tp>=(l.totalDue-1))return 'cleared';for(var i=0;i<(l.payments||[]).length;i++){var p=l.payments[i];if(!p.amountPaid&&p.dueDate&&today>p.dueDate)return 'overdue';}return 'active';}
@@ -1151,7 +1152,8 @@ function _ltGatherCollateral(){
   return arr;
 }
 function saveLT(){
-  var clientType=document.getElementById('lt_client_type').value;
+  try{
+  var clientType=(document.getElementById('lt_client_type')||{value:'individual'}).value;
   var name='',contact='',loc='';
   if(clientType==='individual'){
     name=(document.getElementById('lt_name').value||'').trim();
@@ -1162,17 +1164,22 @@ function saveLT(){
   }
   contact=(document.getElementById('lt_contact').value||'').trim();
   var amt=parseFloat(document.getElementById('lt_amt').value)||0;
-  var mo=parseInt(document.getElementById('lt_mo').value)||1;
+  var mo=parseInt(document.getElementById('lt_mo').value)||12;
   var date=document.getElementById('lt_date').value;
-  var purpose=(document.getElementById('lt_purpose').value||'').trim();
-  if(!name||!contact||!amt||!date){toast('Please fill all required fields (name, contact, amount, date).');return;}
-  var c=ltCalc(amt,mo);if(!c){toast('Amount must be between K20,000 and K1,000,000.');return;}
-  // Concentration risk check
+  if(!name){toast('Please enter the client name.');return;}
+  if(!contact){toast('Please enter the contact number.');return;}
+  if(!amt||amt<=0){toast('Please enter the loan amount.');return;}
+  if(!date){toast('Please select the date.');return;}
+  var c=ltCalc(amt,mo);
+  if(!c){toast('Could not calculate loan terms. Check the amount and try again.');return;}
   var _ltRisks=checkConcentrationRisk({clientName:name,product:'longterm',editId:_ltEditId});
   if(_ltRisks){showRiskModal(_ltRisks,function(){_doSaveLT(name,contact,loc,amt,mo,date,c,clientType);},null);return;}
   _doSaveLT(name,contact,loc,amt,mo,date,c,clientType);
+  }catch(e){toast('Error: '+(e&&e.message?e.message:String(e)));if(window._origConsoleError)window._origConsoleError('saveLT error:',e);}
 }
 function _doSaveLT(name,contact,loc,amt,mo,date,c,clientType){
+  try{
+
   var pmts=[];for(var m=1;m<=mo;m++)pmts.push({month:m,dueDate:ltMonthDate(date,m),amountDue:c.monthly,amountPaid:0,datePaid:null});
   var shareholders=_ltGatherShareholders();
   var collateralItems=_ltGatherCollateral();
@@ -1200,7 +1207,7 @@ function _doSaveLT(name,contact,loc,amt,mo,date,c,clientType){
     bizAssets:parseFloat(document.getElementById('lt_biz_assets').value)||0,
     bizIncome:parseFloat(document.getElementById('lt_biz_income').value)||0,
     bizAddress:(document.getElementById('lt_biz_addr').value||'').trim(),
-    amountGiven:amt,loanPurpose:purpose,termMonths:mo,dateGiven:date,
+    amountGiven:amt,loanPurpose:(document.getElementById('lt_purpose')||{value:''}).value.trim(),termMonths:mo,dateGiven:date,
     serviceCharge:c.svcAmt,disbursedAmount:c.disb,interestRate:c.tier.rate,
     monthlyPayment:c.monthly,totalDue:c.totalDue,totalInterest:c.intTotal,
     collateralItems:collateralItems,
@@ -1230,6 +1237,12 @@ function _doSaveLT(name,contact,loc,amt,mo,date,c,clientType){
     if(_fbReady&&_db){var _lts=JSON.parse(JSON.stringify(obj));_db.collection('salty-corporate').doc('apps').collection('apps').doc(obj.id).set(_lts).catch(function(e){console.warn('LT app write failed:',e);_dirty.apps[obj.id]=true;setTimeout(_pushToFirebase,1000);});}
     logAct('Submitted LT application for '+name+' — awaiting admin approval');
     _saveLS();closeLTModal();toast('Application submitted for approval! ✓');buildNav();renderLongTermLoans(document.getElementById('mainct'));
+  }
+
+  }catch(_saveErr){
+    var _errMsg=_saveErr&&_saveErr.message?_saveErr.message:String(_saveErr);
+    toast('⚠️ Save error: '+_errMsg);
+    if(window._origConsoleError)window._origConsoleError('Save error in _doSaveLT:', _saveErr);
   }
 }
 function ltView(id){
@@ -1885,31 +1898,38 @@ function invCalcModal(){
   sum.innerHTML=h;
 }
 function saveInv(){
+  try{
   var co=(document.getElementById('inv_co').value||'').trim();
   var dir=(document.getElementById('inv_dir').value||'').trim();
   var contact=(document.getElementById('inv_contact').value||'').trim();
   var loc=(document.getElementById('inv_loc').value||'').trim();
   var invno=(document.getElementById('inv_invno').value||'').trim();
-  var invdate=document.getElementById('inv_invdate').value;
+  var invdate=(document.getElementById('inv_invdate')||{value:''}).value;
   var debtor=(document.getElementById('inv_debtor').value||'').trim();
   var amt=parseFloat(document.getElementById('inv_amt').value)||0;
   var accno=(document.getElementById('inv_accno').value||'').trim();
-  var mo=parseInt(document.getElementById('inv_mo').value)||1;
-  var date=document.getElementById('inv_date').value;
-  var coltype=document.getElementById('inv_coltype').value;
+  var mo=parseInt((document.getElementById('inv_mo')||{value:'1'}).value)||1;
+  var date=(document.getElementById('inv_date')||{value:''}).value;
+  var coltype=(document.getElementById('inv_coltype')||{value:'vehicle'}).value;
   var conName=(document.getElementById('inv_con_name').value||'').trim();
   var conAddr=(document.getElementById('inv_con_addr').value||'').trim();
-  var conRepDate=document.getElementById('inv_con_repdate').value;
+  var conRepDate=(document.getElementById('inv_con_repdate')||{value:''}).value;
   var conBank=(document.getElementById('inv_con_bank').value||'').trim();
   var notes=(document.getElementById('inv_notes').value||'').trim();
-  if(!co||!dir||!contact||!loc||!invno||!amt||!date){toast('Please fill all required fields (marked *).');return;}
+  if(!co){toast('Please enter the company name.');return;}
+  if(!contact){toast('Please enter the contact number.');return;}
+  if(!invno){toast('Please enter the invoice number.');return;}
+  if(!amt||amt<=0){toast('Please enter the invoice amount.');return;}
+  if(!date){toast('Please select the date given.');return;}
   var c=invCalc(amt,mo);
-  // Concentration risk check
   var _invRisks=checkConcentrationRisk({clientName:co,debtorName:debtor,product:'invoice',editId:_invEditId});
   if(_invRisks){showRiskModal(_invRisks,function(){_doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c);},null);return;}
   _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c);
+  }catch(e){toast('Error: '+(e&&e.message?e.message:String(e)));if(window._origConsoleError)window._origConsoleError('saveInv error:',e);}
 }
 function _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c){
+  try{
+
   var pmts=[];for(var mx=0;mx<mo;mx++)pmts.push({month:mx+1,dueDate:ltMonthDate(date,mx+1),amountDue:c.schedule[mx].amountDue,amountPaid:0,datePaid:null});
   var lpObj={address:(document.getElementById('inv_lp_addr').value||'').trim(),titleNumber:(document.getElementById('inv_lp_title').value||'').trim()};
   var mvObj={regNumber:(document.getElementById('inv_mv_reg').value||'').trim(),chassisNumber:(document.getElementById('inv_mv_chassis').value||'').trim(),engineNumber:(document.getElementById('inv_mv_engine').value||'').trim(),make:(document.getElementById('inv_mv_make').value||'').trim(),model:(document.getElementById('inv_mv_model').value||'').trim(),color:(document.getElementById('inv_mv_color').value||'').trim()};
@@ -1934,6 +1954,12 @@ function _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,co
     if(_fbReady&&_db){var _invs=JSON.parse(JSON.stringify(appObj));_db.collection('salty-corporate').doc('apps').collection('apps').doc(appObj.id).set(_invs).catch(function(e){console.warn('Inv app write failed:',e);_dirty.apps[appObj.id]=true;setTimeout(_pushToFirebase,1000);});}
     logAct('Submitted invoice application — '+co+' — awaiting admin approval');
     _saveLS();closeInvModal();toast('Application submitted for approval! ✓');buildNav();renderInvoiceLoans(document.getElementById('mainct'));
+  }
+
+  }catch(_saveErr){
+    var _errMsg=_saveErr&&_saveErr.message?_saveErr.message:String(_saveErr);
+    toast('⚠️ Save error: '+_errMsg);
+    if(window._origConsoleError)window._origConsoleError('Save error in _doSaveInv:', _saveErr);
   }
 }
 function invView(id){
@@ -2199,31 +2225,38 @@ function ordCalcModal(){
   sum.innerHTML=h;
 }
 function saveOrd(){
+  try{
   var co=(document.getElementById('ord_co').value||'').trim();
   var dir=(document.getElementById('ord_dir').value||'').trim();
   var contact=(document.getElementById('ord_contact').value||'').trim();
   var loc=(document.getElementById('ord_loc').value||'').trim();
   var ordno=(document.getElementById('ord_ordno').value||'').trim();
-  var orddate=document.getElementById('ord_orddate').value;
+  var orddate=(document.getElementById('ord_orddate')||{value:''}).value;
   var debtor=(document.getElementById('ord_debtor').value||'').trim();
   var amt=parseFloat(document.getElementById('ord_amt').value)||0;
   var accno=(document.getElementById('ord_accno').value||'').trim();
-  var mo=parseInt(document.getElementById('ord_mo').value)||1;
-  var date=document.getElementById('ord_date').value;
-  var coltype=document.getElementById('ord_coltype').value;
+  var mo=parseInt((document.getElementById('ord_mo')||{value:'1'}).value)||1;
+  var date=(document.getElementById('ord_date')||{value:''}).value;
+  var coltype=(document.getElementById('ord_coltype')||{value:'vehicle'}).value;
   var conName=(document.getElementById('ord_con_name').value||'').trim();
   var conAddr=(document.getElementById('ord_con_addr').value||'').trim();
-  var conRepDate=document.getElementById('ord_con_repdate').value;
+  var conRepDate=(document.getElementById('ord_con_repdate')||{value:''}).value;
   var conBank=(document.getElementById('ord_con_bank').value||'').trim();
   var notes=(document.getElementById('ord_notes').value||'').trim();
-  if(!co||!contact||!loc||!ordno||!amt||!date){toast('Please fill all required fields (marked *).');return;}
+  if(!co){toast('Please enter the company name.');return;}
+  if(!contact){toast('Please enter the contact number.');return;}
+  if(!ordno){toast('Please enter the order number.');return;}
+  if(!amt||amt<=0){toast('Please enter the order amount.');return;}
+  if(!date){toast('Please select the date given.');return;}
   var c=ordCalc(amt,mo);
-  // Concentration risk check
   var _ordRisks=checkConcentrationRisk({clientName:co,debtorName:debtor,product:'order',editId:_ordEditId});
   if(_ordRisks){showRiskModal(_ordRisks,function(){_doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c);},null);return;}
   _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c);
+  }catch(e){toast('Error: '+(e&&e.message?e.message:String(e)));if(window._origConsoleError)window._origConsoleError('saveOrd error:',e);}
 }
 function _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c){
+  try{
+
   var pmts=[];for(var mx=0;mx<mo;mx++)pmts.push({month:mx+1,dueDate:ltMonthDate(date,mx+1),amountDue:c.schedule[mx].amountDue,amountPaid:0,datePaid:null});
   var lpObj={address:(document.getElementById('ord_lp_addr').value||'').trim(),titleNumber:(document.getElementById('ord_lp_title').value||'').trim(),size:(document.getElementById('ord_lp_size').value||'').trim()};
   var mvObj={regNumber:(document.getElementById('ord_mv_reg').value||'').trim(),chassisNumber:(document.getElementById('ord_mv_chassis').value||'').trim(),engineNumber:(document.getElementById('ord_mv_engine').value||'').trim(),make:(document.getElementById('ord_mv_make').value||'').trim(),model:(document.getElementById('ord_mv_model').value||'').trim(),color:(document.getElementById('ord_mv_color').value||'').trim()};
@@ -2248,6 +2281,12 @@ function _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,co
     if(_fbReady&&_db){var _ords=JSON.parse(JSON.stringify(appObj));_db.collection('salty-corporate').doc('apps').collection('apps').doc(appObj.id).set(_ords).catch(function(e){console.warn('Ord app write failed:',e);_dirty.apps[appObj.id]=true;setTimeout(_pushToFirebase,1000);});}
     logAct('Submitted order application — '+co+' — awaiting admin approval');
     _saveLS();closeOrdModal();toast('Application submitted for approval! ✓');buildNav();renderOrderLoans(document.getElementById('mainct'));
+  }
+
+  }catch(_saveErr){
+    var _errMsg=_saveErr&&_saveErr.message?_saveErr.message:String(_saveErr);
+    toast('⚠️ Save error: '+_errMsg);
+    if(window._origConsoleError)window._origConsoleError('Save error in _doSaveOrd:', _saveErr);
   }
 }
 function ordView(id){
