@@ -873,6 +873,97 @@ function _photoDisplayHtml(photos){
 
 var LT_TIERS=[{min:20000,max:50000,rate:0.067,svc:0.10},{min:51000,max:150000,rate:0.063,svc:0.10},{min:151000,max:250000,rate:0.053,svc:0.08},{min:251000,max:1000000,rate:0.05,svc:0.05}];
 var _ltEditId=null;
+// ── CLIENT DOCUMENT UPLOAD SYSTEM ───────────────────────────────────────────
+var DOC_LABELS = {
+  cert_inc:    '🏢 Certificate of Incorporation',
+  tax_clear:   '📋 Tax Clearance Certificate',
+  pacra:       '📑 PACRA Printout',
+  bank_stmt:   '🏦 Bank / Mobile Statement',
+  nrc:         '🪪 NRC Copy',
+  passport:    '📷 Passport Size Photo',
+  trading_lic: '📜 Trading Licence',
+  ins_cover:   '🛡 Insurance Cover (Comprehensive)',
+  search_doc:  '🔍 Title Search Document',
+  caveat_app:  '⚖️ Caveat Application',
+  caveat_form: '📝 Caveat Form'
+};
+var LT_DOC_KEYS  = ['cert_inc','tax_clear','pacra','bank_stmt','nrc','passport','trading_lic','ins_cover','search_doc','caveat_app','caveat_form'];
+var INV_DOC_KEYS = ['cert_inc','tax_clear','pacra','bank_stmt','nrc','passport','ins_cover','search_doc','caveat_app','caveat_form'];
+var ORD_DOC_KEYS = ['cert_inc','tax_clear','pacra','bank_stmt','nrc','passport','ins_cover','search_doc','caveat_app','caveat_form'];
+
+var _pendingDocs = {};
+
+function _storeDoc(prefix,key,input){
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  if(!_pendingDocs[prefix])_pendingDocs[prefix]={};
+  _pendingDocs[prefix][key]=file;
+  var s=document.getElementById('docst_'+prefix+'_'+key);
+  if(s){s.textContent='📎 '+file.name.substring(0,22)+'… (queued)';s.style.color='var(--warn)';}
+}
+
+function _docsHtml(prefix,keys,existingDocs){
+  var h='<div class="fsec"><div class="fst">📎 Client Documents</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+  keys.forEach(function(key){
+    var label=DOC_LABELS[key]||key;
+    var existing=existingDocs&&existingDocs[key];
+    var onch='_storeDoc(\''+prefix+'\',\''+key+'\',this)';
+    h+='<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:9px;">';
+    h+='<div style="font-size:10px;font-weight:700;color:var(--gold);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;">'+label+'</div>';
+    if(existing){
+      h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
+      h+='<a href="'+existing+'" target="_blank" style="font-size:11px;color:var(--ok2);">✅ View</a>';
+      h+='<label style="font-size:10px;color:var(--muted);cursor:pointer;">[<input type="file" accept="image/*,.pdf" style="display:none;" onchange="'+onch+'"><span style="color:var(--gold);">Replace</span>]</label>';
+      h+='</div>';
+    }else{
+      h+='<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">';
+      h+='<input type="file" accept="image/*,.pdf" style="display:none;" onchange="'+onch+'">';
+      h+='<span style="padding:3px 8px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.2);border-radius:5px;color:var(--gold);font-size:10px;white-space:nowrap;">📎 Attach</span>';
+      h+='<span id="docst_'+prefix+'_'+key+'" style="font-size:10px;color:var(--muted);">No file</span>';
+      h+='</label>';
+    }
+    h+='</div>';
+  });
+  h+='</div></div>';
+  return h;
+}
+
+function _uploadDocs(prefix,loanId,col){
+  var pending=_pendingDocs[prefix];
+  if(!pending||!Object.keys(pending).length)return;
+  var arrMap={lt:longTermLoans,inv:invoiceLoans,ord:orderLoans};
+  var arr=arrMap[col];if(!arr)return;
+  var uploads=[],keyMap={};
+  Object.keys(pending).forEach(function(key){
+    var file=pending[key];if(!file)return;
+    var fname=col.toUpperCase()+'_'+loanId+'_'+key+'_'+Date.now();
+    uploads.push(_uploadOnePhoto(file,fname).then(function(url){if(url)keyMap[key]=url;}));
+  });
+  Promise.all(uploads).then(function(){
+    if(!Object.keys(keyMap).length)return;
+    var loan=arr.filter(function(x){return x.id===loanId;})[0];
+    if(loan){if(!loan.docs)loan.docs={};Object.keys(keyMap).forEach(function(k){loan.docs[k]=keyMap[k];});_markDirty(col,loanId);save();toast('📎 '+Object.keys(keyMap).length+' document(s) uploaded!');}
+    delete _pendingDocs[prefix];
+  });
+}
+
+function _docDisplayHtml(docs){
+  if(!docs)return'';
+  var keys=Object.keys(docs).filter(function(k){return docs[k];});
+  if(!keys.length)return'';
+  var h='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📎 Client Documents ('+keys.length+')</span></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:12px;">';
+  keys.forEach(function(k){
+    var label=DOC_LABELS[k]||k;
+    h+='<a href="'+docs[k]+'" target="_blank" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(201,168,76,.05);border:1px solid rgba(201,168,76,.15);border-radius:8px;text-decoration:none;color:var(--text);">';
+    h+='<span style="font-size:18px;">📄</span><span style="font-size:11px;font-weight:600;line-height:1.3;">'+label+'</span></a>';
+  });
+  h+='</div></div>';
+  return h;
+}
+
+
 function ltGetTier(a){for(var i=0;i<LT_TIERS.length;i++)if(a>=LT_TIERS[i].min&&a<=LT_TIERS[i].max)return LT_TIERS[i];if(a>0&&a<LT_TIERS[0].min)return LT_TIERS[0];if(a>LT_TIERS[LT_TIERS.length-1].max)return LT_TIERS[LT_TIERS.length-1];return null;}
 function ltMonthDate(dg,m){var d=new Date(dg+'T00:00:00');d.setMonth(d.getMonth()+m);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
 function ltCalc(amt,months){var t=ltGetTier(amt);if(!t)return null;var svcAmt=Math.round(amt*t.svc*100)/100,disb=Math.round((amt-svcAmt)*100)/100,intTotal=Math.round(amt*t.rate*months*100)/100,totalDue=Math.round((amt+intTotal)*100)/100,monthly=Math.round(totalDue/months*100)/100;return {tier:t,svcAmt:svcAmt,disb:disb,intTotal:intTotal,totalDue:totalDue,monthly:monthly};}
@@ -1076,6 +1167,8 @@ function openLTModal(editId){
   h+='<div class="fg" style="margin-top:8px;"><label class="fl">Notes</label><input class="fi" id="lt_notes" value="'+esc(l?l.notes||'':'')+'"></div>';
   h+='</div>';
 
+  // ── Client Documents ──
+  h+=_docsHtml('lt',LT_DOC_KEYS,l?l.docs||{}:{});
   // ── Signatures ──
   h+=_photoSectionHtml('lt','ltHandlePhotos',l?l.photos||[]:[]);
   h+='<div class="fsec"><div class="fst">✍️ Signatures</div><div class="fr3">';
@@ -1221,12 +1314,13 @@ function _doSaveLT(name,contact,loc,amt,mo,date,c,clientType){
   if(_ltEditId){
     var l=longTermLoans.filter(function(x){return x.id===_ltEditId;})[0];
     if(l){Object.assign(l,obj);if(l.payments.length!==mo)l.payments=pmts;}
-    _markDirty('lt',_ltEditId);logAct('Updated LT loan — '+name);
+    _uploadDocs('lt',_ltEditId,'lt');_markDirty('lt',_ltEditId);logAct('Updated LT loan — '+name);
     save();closeLTModal();toast('Loan updated! ✓');renderLongTermLoans(document.getElementById('mainct'));
   } else if(canDirectCreate()){
     obj.id='LT-'+Date.now();obj.payments=pmts;obj.status='active';obj.createdBy=cu.display;obj.createdAt=now_();
     longTermLoans.push(obj);_markDirty('lt',obj.id);logAct('LT loan — '+name+' — '+zmw(amt));
     if(_ltPhotos.length)_uploadLTPhotos(obj.id);
+    _uploadDocs('lt',obj.id,'lt');
     save();closeLTModal();toast('Loan application saved! 💼');renderLongTermLoans(document.getElementById('mainct'));
   } else {
     obj.id='APP-'+Date.now();obj.product='💼 Long Term Loan';obj.amount=amt;obj.status='pending';
@@ -1767,14 +1861,36 @@ function _sigCanvas(canvasId,existingSig){
 
 // ===== INVOICE DISCOUNTING =====
 var _invEditId=null;
-function invCalc(amt,months){
-  var svc=Math.round(amt*0.085*100)/100;
-  var adv=Math.round(amt*0.80*100)/100;
+function invCalc(amt,months,financedAmt){
+  // financedAmt = partial amount client wants to finance (≤ amt); defaults to full amt
+  var base=financedAmt&&financedAmt>0&&financedAmt<amt?financedAmt:amt;
+  var svc=Math.round(base*0.085*100)/100;
+  var adv=Math.round(base*0.80*100)/100;
   var net=Math.round((adv-svc)*100)/100;
-  var schedule=[],bal=amt;
+  var schedule=[],bal=base;
   for(var m=1;m<=months;m++){bal=Math.round(bal*1.05*100)/100;schedule.push({month:m,amountDue:bal});}
-  return {svc:svc,disb:adv,net:net,schedule:schedule};
+  return {svc:svc,disb:adv,net:net,schedule:schedule,financedBase:base};
 }
+// ── Daily penalty: 5%/30 per day on outstanding balance ─────────────────────
+var INV_ORD_DAILY_RATE = 0.05/30;  // ≈ 0.1667% per day
+function daysBetween(dateStr1, dateStr2){
+  var d1=new Date(dateStr1+'T00:00:00'), d2=new Date(dateStr2+'T00:00:00');
+  return Math.max(0, Math.round((d2-d1)/(1000*60*60*24)));
+}
+function calcOverduePenalty(dueDate, balance){
+  // Returns penalty accrued from dueDate to today
+  var today=td_();
+  if(!dueDate||today<=dueDate||balance<=0)return 0;
+  var days=daysBetween(dueDate,today);
+  return Math.round(balance*INV_ORD_DAILY_RATE*days*100)/100;
+}
+function penaltyBreakdown(dueDate, balance){
+  var today=td_();
+  var days=daysBetween(dueDate,today);
+  var penalty=Math.round(balance*INV_ORD_DAILY_RATE*days*100)/100;
+  return {days:days, penalty:penalty, dailyRate:INV_ORD_DAILY_RATE};
+}
+
 function invStatus(l){if(l.status==='cleared')return 'cleared';if(l.status==='cancelled')return 'cancelled';var today=td_();for(var i=0;i<(l.months||[]).length;i++){var m=l.months[i];if(!(m.amountPaid>=(m.amountDue-1))&&m.dueDate&&today>m.dueDate)return 'overdue';}return 'active';}
 function invBalance(l){var t=0;for(var i=0;i<(l.months||[]).length;i++)t+=Math.max(0,l.months[i].amountDue-(l.months[i].amountPaid||0));return t;}
 function renderInvoiceLoans(mc){
@@ -1834,6 +1950,17 @@ function openInvModal(editId){
   h+='<div class="fg"><label class="fl">Debtor (Customer) *</label><input class="fi" id="inv_debtor" value="'+esc(l?l.debtor||'':'')+'"></div>';
   h+='</div><div class="fr3">';
   h+='<div class="fg"><label class="fl">Invoice Amount (ZMW) *</label><input class="fi" type="number" id="inv_amt" value="'+(l?l.amountGiven:'')+'" oninput="invCalcModal()"></div>';
+  h+='<div class="fg" id="inv_finance_mode_section"><label class="fl">Finance Mode *</label>';
+  h+='<div style="display:flex;gap:16px;margin-bottom:6px;">';
+  h+='<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">';
+  h+='<input type="radio" name="inv_fm" id="inv_fm_full" value="full" onchange="invTogglePartial();invCalcModal();" '+(l&&l.financedAmount&&l.financedAmount<l.amountGiven?'':'checked')+'> 💯 Finance full invoice (80% of total)</label>';
+  h+='<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">';
+  h+='<input type="radio" name="inv_fm" id="inv_fm_partial" value="partial" onchange="invTogglePartial();invCalcModal();" '+(l&&l.financedAmount&&l.financedAmount<l.amountGiven?'checked':'')+'> ✂️ Finance specific amount</label>';
+  h+='</div>';
+  h+='<div id="inv_partial_row" style="display:'+(l&&l.financedAmount&&l.financedAmount<l.amountGiven?'block':'none')+';margin-top:6px;">';
+  h+='<input class="fi" type="number" id="inv_financed_amt" placeholder="Enter amount to finance (must be less than invoice total)" value="'+(l&&l.financedAmount&&l.financedAmount<l.amountGiven?l.financedAmount:'')+'" oninput="invCalcModal()">';
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:3px;">We will advance 80% of this amount. Must be less than the invoice total.</div>';
+  h+='</div></div>';
   h+='<div class="fg"><label class="fl">Account Number</label><input class="fi" id="inv_accno" value="'+esc(l?l.accountNumber||'':'')+'"></div>';
   h+='<div class="fg"><label class="fl">Term (Months, max 3) *</label><select class="fsel" id="inv_mo" onchange="invCalcModal()"><option value="1"'+(l&&l.termMonths===1?' selected':'')+'>1 Month</option><option value="2"'+(l&&l.termMonths===2?' selected':'')+'>2 Months</option><option value="3"'+(l&&l.termMonths===3?' selected':'')+'>3 Months</option></select></div>';
   h+='</div><div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="inv_date" value="'+(l?l.dateGiven:td_())+'" onchange="invCalcModal()"></div>';
@@ -1862,6 +1989,7 @@ function openInvModal(editId){
   h+='<div class="fg"><label class="fl">Zanaco Account Number</label><input class="fi" id="inv_con_bank" placeholder="Account number for deposits" value="'+esc(co.bankAccount||'')+'"></div>';
   h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="inv_notes" value="'+esc(l?l.notes||'':'')+'"></div>';
   h+='</div></div>';
+  h+=_docsHtml('inv',INV_DOC_KEYS,l?l.docs||{}:{});
   h+=_photoSectionHtml('inv','invHandlePhotos',l?l.photos||[]:[]);
   h+='<div class="fsec"><div class="fst">✍️ Signatures</div><div class="fr3">';
   h+='<div class="fg"><label class="fl">Client / Applicant Signature</label>'+_sigCanvas('inv_sig_client',l?l.clientSig||null:null)+'</div>';
@@ -1877,26 +2005,40 @@ function openInvModal(editId){
   var sel=document.getElementById('inv_mo');if(sel&&l){for(var i=0;i<sel.options.length;i++)if(parseInt(sel.options[i].value)===l.termMonths)sel.selectedIndex=i;}
 }
 function closeInvModal(){var m=document.getElementById('invmod');if(m)m.remove();}
+function invTogglePartial(){
+  var pm=document.getElementById('inv_fm_partial');
+  var row=document.getElementById('inv_partial_row');
+  if(row)row.style.display=(pm&&pm.checked)?'block':'none';
+}
 function invCalcModal(){
   var amt=parseFloat(document.getElementById('inv_amt')&&document.getElementById('inv_amt').value)||0;
   var mo=parseInt(document.getElementById('inv_mo')&&document.getElementById('inv_mo').value)||1;
   var date=document.getElementById('inv_date')&&document.getElementById('inv_date').value;
+  var pm=document.getElementById('inv_fm_partial');
+  var financedAmt=0;
+  if(pm&&pm.checked){
+    financedAmt=parseFloat(document.getElementById('inv_financed_amt')&&document.getElementById('inv_financed_amt').value)||0;
+  }
+  var useAmt=financedAmt>0&&financedAmt<amt?financedAmt:amt;
   var sum=document.getElementById('inv_sum');if(!sum)return;
   if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in invoice amount to see calculation</div>';return;}
-  var c=invCalc(amt,mo);
+  if(pm&&pm.checked&&(!financedAmt||financedAmt>=amt)){sum.innerHTML='<div style="font-size:12px;color:var(--warn);">⚠ Enter a financed amount less than the invoice total ('+zmw(amt)+')</div>';return;}
+  var c=invCalc(amt,mo,useAmt);
   var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;">';
-  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Invoice Amount</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div>';
+  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Invoice Total</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div>';
+  if(useAmt<amt)h+='<div><div style="font-size:10px;color:var(--warn);text-transform:uppercase;margin-bottom:4px;">Financed Amount</div><div style="font-size:18px;font-weight:700;color:var(--warn);">'+zmw(useAmt)+'</div></div>';
   h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Advance (80%)</div><div style="font-size:18px;font-weight:700;color:var(--blue2);">'+zmw(c.disb)+'</div></div>';
   h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Service Charge (8.5%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svc)+'</div></div>';
   h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Net to Client</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.net)+'</div></div>';
   h+='</div><div style="display:flex;gap:8px;flex-wrap:wrap;">';
   c.schedule.forEach(function(s){
     var dd=date?ltMonthDate(date,s.month):'—';
-    h+='<div style="background:rgba(108,52,131,.1);border:1px solid rgba(108,52,131,.2);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:10px;color:var(--muted);">Month '+s.month+'</div><div style="font-size:15px;font-weight:700;color:var(--purple2);">'+zmw(s.amountDue)+'</div><div style="font-size:9px;color:var(--muted);">Due: '+fmtD(dd)+'</div></div>';
+    h+='<div style="background:rgba(100,60,200,.1);border:1px solid rgba(100,60,200,.2);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:10px;color:var(--muted);">Month '+s.month+'</div><div style="font-size:15px;font-weight:700;color:#9b59b6;">'+zmw(s.amountDue)+'</div><div style="font-size:9px;color:var(--muted);">Due: '+fmtD(dd)+'</div></div>';
   });
   h+='</div>';
   sum.innerHTML=h;
 }
+
 function saveInv(){
   try{
   var co=(document.getElementById('inv_co').value||'').trim();
@@ -1921,13 +2063,16 @@ function saveInv(){
   if(!invno){toast('Please enter the invoice number.');return;}
   if(!amt||amt<=0){toast('Please enter the invoice amount.');return;}
   if(!date){toast('Please select the date given.');return;}
-  var c=invCalc(amt,mo);
+  var _invPM=document.getElementById('inv_fm_partial');
+  var _invFinancedAmt=(_invPM&&_invPM.checked)?parseFloat(document.getElementById('inv_financed_amt')&&document.getElementById('inv_financed_amt').value)||0:0;
+  if(_invFinancedAmt>=amt)_invFinancedAmt=0; // safety: must be < total
+  var c=invCalc(amt,mo,_invFinancedAmt);
   var _invRisks=checkConcentrationRisk({clientName:co,debtorName:debtor,product:'invoice',editId:_invEditId});
-  if(_invRisks){showRiskModal(_invRisks,function(){_doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c);},null);return;}
-  _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c);
+  if(_invRisks){showRiskModal(_invRisks,function(){_doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c,_invFinancedAmt);},null);return;}
+  _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c,_invFinancedAmt);
   }catch(e){toast('Error: '+(e&&e.message?e.message:String(e)));if(window._origConsoleError)window._origConsoleError('saveInv error:',e);}
 }
-function _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c){
+function _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c,financedAmt){
   try{
 
   var pmts=[];for(var mx=0;mx<mo;mx++)pmts.push({month:mx+1,dueDate:ltMonthDate(date,mx+1),amountDue:c.schedule[mx].amountDue,amountPaid:0,datePaid:null});
@@ -1938,14 +2083,15 @@ function _doSaveInv(co,dir,contact,loc,invno,invdate,debtor,amt,accno,mo,date,co
   var repSig=getSig('inv_sig_rep');
   if(_invEditId){
     var l=invoiceLoans.filter(function(x){return x.id===_invEditId;})[0];
-    if(l){l.companyName=co;l.directorName=dir;l.contact=contact;l.location=loc;l.invoiceNumber=invno;l.invoiceDate=invdate;l.debtor=debtor;l.amountGiven=amt;l.accountNumber=accno;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svc;l.disbursedAmount=c.disb;l.netAmount=c.net;l.collateralType=coltype;l.landedProp=lpObj;l.motorVehicle=mvObj;l.consent=consent;l.notes=notes;if(clientSig)l.clientSig=clientSig;if(repSig)l.repSig=repSig;if(l.months.length!==mo)l.months=pmts;}
-    _markDirty('inv',_invEditId);logAct('Updated invoice — '+co);
+    if(l){l.companyName=co;l.directorName=dir;l.contact=contact;l.location=loc;l.invoiceNumber=invno;l.invoiceDate=invdate;l.debtor=debtor;l.amountGiven=amt;l.accountNumber=accno;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svc;l.disbursedAmount=c.disb;l.netAmount=c.net;l.financedAmount=financedAmt||0;l.collateralType=coltype;l.landedProp=lpObj;l.motorVehicle=mvObj;l.consent=consent;l.notes=notes;if(clientSig)l.clientSig=clientSig;if(repSig)l.repSig=repSig;if(l.months.length!==mo)l.months=pmts;}
+    _uploadDocs('inv',_invEditId,'inv');_markDirty('inv',_invEditId);logAct('Updated invoice — '+co);
     save();closeInvModal();toast('Invoice agreement updated! ✓');renderInvoiceLoans(document.getElementById('mainct'));
   } else if(canDirectCreate()){
-    var _newInv={id:'INV-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,invoiceNumber:invno,invoiceDate:invdate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,netAmount:c.net,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,months:pmts,status:'active',notes:notes,createdBy:cu.display,createdAt:now_()};
+    var _newInv={id:'INV-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,invoiceNumber:invno,invoiceDate:invdate,debtor:debtor,amountGiven:amt,financedAmount:financedAmt||0,accountNumber:accno,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,netAmount:c.net,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,months:pmts,status:'active',notes:notes,createdBy:cu.display,createdAt:now_()};
     invoiceLoans.push(_newInv);_markDirty('inv',_newInv.id);
     logAct('Invoice — '+co+' — '+zmw(amt));
     if(_invPhotos.length)_uploadInvPhotos(_newInv.id);
+    _uploadDocs('inv',_newInv.id,'inv');
     save();closeInvModal();toast('Invoice loan saved! 📄');renderInvoiceLoans(document.getElementById('mainct'));
   } else {
     var appObj={id:'APP-'+Date.now(),type:'invoice',product:'📄 Invoice Discounting',clientName:co,companyName:co,directorName:dir,contact:contact,location:loc,invoiceNumber:invno,invoiceDate:invdate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,amount:amt,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,notes:notes,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
@@ -1976,7 +2122,7 @@ function invView(id){
   h+='<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.companyName)+'</div>';
   h+='<div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.directorName||'')+' · '+esc(l.contact)+' · '+esc(l.location)+'</div>';
   h+='</div>';
-  h+='<div class="sg"><div class="sc"><div class="sl">Invoice Amount</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div><div class="sc"><div class="sl">Advance (80%)</div><div class="sv" style="font-size:16px;color:var(--blue2);">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Net to Client</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(l.netAmount||l.disbursedAmount)+'</div></div><div class="sc"><div class="sl">Term</div><div class="sv">'+l.termMonths+' month'+(l.termMonths>1?'s':'')+'</div></div><div class="sc"><div class="sl">Status</div><div class="sv" style="color:'+(st==='cleared'?'var(--ok2)':st==='overdue'?'var(--red2)':'var(--blue2)')+';">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue ⚠️':'Active')+'</div></div></div>';
+  h+='<div class="sg"><div class="sc"><div class="sl">Invoice Total</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div>'+(l.financedAmount&&l.financedAmount>0&&l.financedAmount<l.amountGiven?'<div class="sc" style="border-top-color:var(--warn)"><div class="sl">Financed Amount</div><div class="sv" style="font-size:14px;color:var(--warn);">'+zmw(l.financedAmount)+'</div></div>':'')+'<div class="sc"><div class="sl">Advance (80%)</div><div class="sv" style="font-size:16px;color:var(--blue2);">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Net to Client</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(l.netAmount||l.disbursedAmount)+'</div></div><div class="sc"><div class="sl">Term</div><div class="sv">'+l.termMonths+' month'+(l.termMonths>1?'s':'')+'</div></div><div class="sc"><div class="sl">Status</div><div class="sv" style="color:'+(st==='cleared'?'var(--ok2)':st==='overdue'?'var(--red2)':'var(--blue2)')+';">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue ⚠️':'Active')+'</div></div></div>';
   h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📋 Invoice Details (Schedule A)</span></div><div class="cdb">';
   h+='<div class="rm"><span class="rml">Invoice Number</span><span class="rmv">'+esc(l.invoiceNumber||'—')+'</span></div>';
   h+='<div class="rm"><span class="rml">Invoice Date</span><span class="rmv">'+fmtD(l.invoiceDate||'')+'</span></div>';
@@ -2009,16 +2155,21 @@ function invView(id){
     h+='</div></div>';
   }
   var today=td_();
-  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Monthly Repayment Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Balance</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';
+  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Monthly Repayment Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Balance</th><th>Daily Penalty</th><th>Total Now Due</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';
   (l.months||[]).forEach(function(p,i){
     var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending';
     var bal=Math.max(0,p.amountDue-(p.amountPaid||0));
-    h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-family:monospace;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>';
+    var pen=ps==='overdue'?calcOverduePenalty(p.dueDate,bal):0;
+    var totalNow=Math.round((bal+pen)*100)/100;
+    h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-family:monospace;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td>';
+    if(ps==='overdue'){var pb=penaltyBreakdown(p.dueDate,bal);h+='<td style="font-family:monospace;color:var(--red2);font-size:11px;">'+zmw(pen)+'<div style="font-size:9px;color:var(--muted);">'+pb.days+' days × '+(INV_ORD_DAILY_RATE*100).toFixed(4)+'%</div></td><td style="font-family:monospace;font-weight:700;color:var(--red2);">'+zmw(totalNow)+'</td>';}else{h+='<td style="color:var(--muted);font-size:11px;">—</td><td style="font-family:monospace;">'+zmw(bal)+'</td>';}
+    h+='<td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>';
     if(canManage())h+='<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="invRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="invUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>';
     h+='</tr>';
   });
   h+='</tbody></table></div></div>';
   if(l.photos&&l.photos.length){h+=_photoDisplayHtml(l.photos);}
+  h+=_docDisplayHtml(l.docs||{});
   mc.innerHTML=h;
 }
 function printInvAgreement(id,l,templateMode){
@@ -2095,18 +2246,20 @@ function printInvAgreement(id,l,templateMode){
   if(templateMode)html+='<script>window.addEventListener(\'load\',function(){toggleEdit();});<\/script>';
   w.document.write(html);w.document.close();
 }
-function invRecordPay(id,i){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' balance: '+zmw(def)+'\nEnter amount:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();var all=true;for(var j=0;j<l.months.length;j++)if(l.months[j].amountPaid<l.months[j].amountDue-1){all=false;break;}if(all)l.status='cleared';_markDirty('inv',l.id);logAct('Invoice pay — '+l.companyName+' M'+p.month+' — '+zmw(amt));save();toast('Payment recorded!');invView(id);}
+function invRecordPay(id,i){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i],bal=Math.max(0,p.amountDue-(p.amountPaid||0));var today=td_();var pen=today>p.dueDate?calcOverduePenalty(p.dueDate,bal):0;var totalNow=Math.round((bal+pen)*100)/100;var pb=pen>0?penaltyBreakdown(p.dueDate,bal):null;var msg='Month '+p.month+' — '+l.companyName+'\nOriginal balance: '+zmw(bal);if(pen>0)msg+='\n⚠ Daily penalty ('+pb.days+' days @ '+(INV_ORD_DAILY_RATE*100).toFixed(4)+'%/day): +'+zmw(pen)+'\nTOTAL NOW DUE: '+zmw(totalNow);msg+='\n\nEnter amount received:';var s=prompt(msg,totalNow);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=today;if(pen>0)p.penaltyCollected=(p.penaltyCollected||0)+Math.min(pen,Math.max(0,amt-bal));var all=true;for(var j=0;j<l.months.length;j++)if(l.months[j].amountPaid<l.months[j].amountDue-1){all=false;break;}if(all)l.status='cleared';_markDirty('inv',l.id);logAct('Invoice pay — '+l.companyName+' M'+p.month+' — '+zmw(amt)+(pen>0?' (incl. '+zmw(pen)+' penalty)':''));save();toast('Payment recorded!');invView(id);}
 function invUndoPay(id,i){var l=invoiceLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i];if(!confirm('Undo Month '+p.month+'?'))return;p.amountPaid=0;p.datePaid=null;if(l.status==='cleared')l.status='active';_markDirty('inv',l.id);save();toast('Undone.');invView(id);}
 
 // ===== ORDER FINANCING =====
 var _ordEditId=null;
-function ordCalc(amt,months){
-  var svc=Math.round(amt*0.085*100)/100;
-  var adv=Math.round(amt*0.70*100)/100;
+function ordCalc(amt,months,financedAmt){
+  // financedAmt = partial amount client wants to finance (≤ amt); defaults to full amt
+  var base=financedAmt&&financedAmt>0&&financedAmt<amt?financedAmt:amt;
+  var svc=Math.round(base*0.085*100)/100;
+  var adv=Math.round(base*0.70*100)/100;
   var net=Math.round((adv-svc)*100)/100;
-  var schedule=[],bal=amt;
+  var schedule=[],bal=base;
   for(var m=1;m<=months;m++){bal=Math.round(bal*1.05*100)/100;schedule.push({month:m,amountDue:bal});}
-  return {svc:svc,disb:adv,net:net,schedule:schedule};
+  return {svc:svc,disb:adv,net:net,schedule:schedule,financedBase:base};
 }
 function renderOrderLoans(mc){
   var fs=window._ordFilter||'all';
@@ -2163,6 +2316,17 @@ function openOrdModal(editId){
   h+='<div class="fg"><label class="fl">Debtor (Customer) *</label><input class="fi" id="ord_debtor" value="'+esc(l?l.debtor||'':'')+'"></div>';
   h+='</div><div class="fr3">';
   h+='<div class="fg"><label class="fl">Order Amount (ZMW) *</label><input class="fi" type="number" id="ord_amt" value="'+(l?l.amountGiven:'')+'" oninput="ordCalcModal()"></div>';
+  h+='<div class="fg" id="ord_finance_mode_section"><label class="fl">Finance Mode *</label>';
+  h+='<div style="display:flex;gap:16px;margin-bottom:6px;">';
+  h+='<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">';
+  h+='<input type="radio" name="ord_fm" id="ord_fm_full" value="full" onchange="ordTogglePartial();ordCalcModal();" '+(l&&l.financedAmount&&l.financedAmount<l.amountGiven?'':'checked')+'> 💯 Finance full order (70% of total)</label>';
+  h+='<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">';
+  h+='<input type="radio" name="ord_fm" id="ord_fm_partial" value="partial" onchange="ordTogglePartial();ordCalcModal();" '+(l&&l.financedAmount&&l.financedAmount<l.amountGiven?'checked':'')+'> ✂️ Finance specific amount</label>';
+  h+='</div>';
+  h+='<div id="ord_partial_row" style="display:'+(l&&l.financedAmount&&l.financedAmount<l.amountGiven?'block':'none')+';margin-top:6px;">';
+  h+='<input class="fi" type="number" id="ord_financed_amt" placeholder="Enter amount to finance (must be less than order total)" value="'+(l&&l.financedAmount&&l.financedAmount<l.amountGiven?l.financedAmount:'')+'" oninput="ordCalcModal()">';
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:3px;">We will advance 70% of this amount. Must be less than the order total.</div>';
+  h+='</div></div>';
   h+='<div class="fg"><label class="fl">Account Number</label><input class="fi" id="ord_accno" value="'+esc(l?l.accountNumber||'':'')+'"></div>';
   h+='<div class="fg"><label class="fl">Term (Months, max 3) *</label><select class="fsel" id="ord_mo" onchange="ordCalcModal()"><option value="1"'+(l&&l.termMonths===1?' selected':'')+'>1 Month</option><option value="2"'+(l&&l.termMonths===2?' selected':'')+'>2 Months</option><option value="3"'+(l&&l.termMonths===3?' selected':'')+'>3 Months</option></select></div>';
   h+='</div><div class="fg"><label class="fl">Date Given *</label><input class="fi" type="date" id="ord_date" value="'+(l?l.dateGiven:td_())+'" onchange="ordCalcModal()"></div></div>';
@@ -2191,6 +2355,7 @@ function openOrdModal(editId){
   h+='<div class="fg"><label class="fl">Zanaco Account Number</label><input class="fi" id="ord_con_bank" placeholder="Account number for deposits" value="'+esc(co.bankAccount||'')+'"></div>';
   h+='<div class="fg"><label class="fl">Notes</label><input class="fi" id="ord_notes" value="'+esc(l?l.notes||'':'')+'"></div>';
   h+='</div></div>';
+  h+=_docsHtml('ord',ORD_DOC_KEYS,l?l.docs||{}:{});
   h+=_photoSectionHtml('ord','ordHandlePhotos',l?l.photos||[]:[]);
   h+='<div class="fsec"><div class="fst">✍️ Signatures</div><div class="fr3">';
   h+='<div class="fg"><label class="fl">Client / Applicant Signature</label>'+_sigCanvas('ord_sig_client',l?l.clientSig||null:null)+'</div>';
@@ -2204,15 +2369,28 @@ function openOrdModal(editId){
   initSigPad('ord_sig_rep');
 }
 function closeOrdModal(){var m=document.getElementById('ordmod');if(m)m.remove();}
+function ordTogglePartial(){
+  var pm=document.getElementById('ord_fm_partial');
+  var row=document.getElementById('ord_partial_row');
+  if(row)row.style.display=(pm&&pm.checked)?'block':'none';
+}
 function ordCalcModal(){
   var amt=parseFloat(document.getElementById('ord_amt')&&document.getElementById('ord_amt').value)||0;
   var mo=parseInt(document.getElementById('ord_mo')&&document.getElementById('ord_mo').value)||1;
   var date=document.getElementById('ord_date')&&document.getElementById('ord_date').value;
+  var pm=document.getElementById('ord_fm_partial');
+  var financedAmt=0;
+  if(pm&&pm.checked){
+    financedAmt=parseFloat(document.getElementById('ord_financed_amt')&&document.getElementById('ord_financed_amt').value)||0;
+  }
+  var useAmt=financedAmt>0&&financedAmt<amt?financedAmt:amt;
   var sum=document.getElementById('ord_sum');if(!sum)return;
   if(!amt){sum.innerHTML='<div style="font-size:12px;color:var(--muted);">Fill in order amount to see calculation</div>';return;}
-  var c=ordCalc(amt,mo);
+  if(pm&&pm.checked&&(!financedAmt||financedAmt>=amt)){sum.innerHTML='<div style="font-size:12px;color:var(--warn);">⚠ Enter a financed amount less than the order total ('+zmw(amt)+')</div>';return;}
+  var c=ordCalc(amt,mo,useAmt);
   var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;">';
-  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Order Amount</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div>';
+  h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Order Total</div><div style="font-size:18px;font-weight:700;">'+zmw(amt)+'</div></div>';
+  if(useAmt<amt)h+='<div><div style="font-size:10px;color:var(--warn);text-transform:uppercase;margin-bottom:4px;">Financed Amount</div><div style="font-size:18px;font-weight:700;color:var(--warn);">'+zmw(useAmt)+'</div></div>';
   h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Advance (70%)</div><div style="font-size:18px;font-weight:700;color:var(--blue2);">'+zmw(c.disb)+'</div></div>';
   h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Service Charge (8.5%)</div><div style="font-size:18px;font-weight:700;color:var(--red2);">'+zmw(c.svc)+'</div></div>';
   h+='<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Net to Client</div><div style="font-size:18px;font-weight:700;color:var(--gold);">'+zmw(c.net)+'</div></div>';
@@ -2248,13 +2426,16 @@ function saveOrd(){
   if(!ordno){toast('Please enter the order number.');return;}
   if(!amt||amt<=0){toast('Please enter the order amount.');return;}
   if(!date){toast('Please select the date given.');return;}
-  var c=ordCalc(amt,mo);
+  var _ordPM=document.getElementById('ord_fm_partial');
+  var _ordFinancedAmt=(_ordPM&&_ordPM.checked)?parseFloat(document.getElementById('ord_financed_amt')&&document.getElementById('ord_financed_amt').value)||0:0;
+  if(_ordFinancedAmt>=amt)_ordFinancedAmt=0;
+  var c=ordCalc(amt,mo,_ordFinancedAmt);
   var _ordRisks=checkConcentrationRisk({clientName:co,debtorName:debtor,product:'order',editId:_ordEditId});
-  if(_ordRisks){showRiskModal(_ordRisks,function(){_doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c);},null);return;}
-  _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c);
+  if(_ordRisks){showRiskModal(_ordRisks,function(){_doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c,_ordFinancedAmt);},null);return;}
+  _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c,_ordFinancedAmt);
   }catch(e){toast('Error: '+(e&&e.message?e.message:String(e)));if(window._origConsoleError)window._origConsoleError('saveOrd error:',e);}
 }
-function _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c){
+function _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,coltype,conName,conAddr,conRepDate,conBank,notes,c,financedAmt){
   try{
 
   var pmts=[];for(var mx=0;mx<mo;mx++)pmts.push({month:mx+1,dueDate:ltMonthDate(date,mx+1),amountDue:c.schedule[mx].amountDue,amountPaid:0,datePaid:null});
@@ -2265,14 +2446,15 @@ function _doSaveOrd(co,dir,contact,loc,ordno,orddate,debtor,amt,accno,mo,date,co
   var repSig=getSig('ord_sig_rep');
   if(_ordEditId){
     var l=orderLoans.filter(function(x){return x.id===_ordEditId;})[0];
-    if(l){l.companyName=co;l.directorName=dir;l.contact=contact;l.location=loc;l.orderNumber=ordno;l.orderDate=orddate;l.debtor=debtor;l.amountGiven=amt;l.accountNumber=accno;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svc;l.disbursedAmount=c.disb;l.netAmount=c.net;l.collateralType=coltype;l.landedProp=lpObj;l.motorVehicle=mvObj;l.consent=consent;l.notes=notes;if(clientSig)l.clientSig=clientSig;if(repSig)l.repSig=repSig;if(l.months.length!==mo)l.months=pmts;}
-    _markDirty('ord',_ordEditId);logAct('Updated order — '+co);
+    if(l){l.companyName=co;l.directorName=dir;l.contact=contact;l.location=loc;l.orderNumber=ordno;l.orderDate=orddate;l.debtor=debtor;l.amountGiven=amt;l.accountNumber=accno;l.termMonths=mo;l.dateGiven=date;l.serviceCharge=c.svc;l.disbursedAmount=c.disb;l.netAmount=c.net;l.financedAmount=financedAmt||0;l.collateralType=coltype;l.landedProp=lpObj;l.motorVehicle=mvObj;l.consent=consent;l.notes=notes;if(clientSig)l.clientSig=clientSig;if(repSig)l.repSig=repSig;if(l.months.length!==mo)l.months=pmts;}
+    _uploadDocs('ord',_ordEditId,'ord');_markDirty('ord',_ordEditId);logAct('Updated order — '+co);
     save();closeOrdModal();toast('Order agreement updated! ✓');renderOrderLoans(document.getElementById('mainct'));
   } else if(canDirectCreate()){
-    var _newOrd={id:'ORD-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,orderNumber:ordno,orderDate:orddate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,netAmount:c.net,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,months:pmts,status:'active',notes:notes,createdBy:cu.display,createdAt:now_()};
+    var _newOrd={id:'ORD-'+Date.now(),companyName:co,directorName:dir,contact:contact,location:loc,orderNumber:ordno,orderDate:orddate,debtor:debtor,amountGiven:amt,financedAmount:financedAmt||0,accountNumber:accno,termMonths:mo,dateGiven:date,serviceCharge:c.svc,disbursedAmount:c.disb,netAmount:c.net,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,months:pmts,status:'active',notes:notes,createdBy:cu.display,createdAt:now_()};
     orderLoans.push(_newOrd);_markDirty('ord',_newOrd.id);
     logAct('Order — '+co+' — '+zmw(amt));
     if(_ordPhotos.length)_uploadOrdPhotos(_newOrd.id);
+    _uploadDocs('ord',_newOrd.id,'ord');
     save();closeOrdModal();toast('Order loan saved! 📦');renderOrderLoans(document.getElementById('mainct'));
   } else {
     var appObj={id:'APP-'+Date.now(),type:'order',product:'📦 Order Financing',clientName:co,companyName:co,directorName:dir,contact:contact,location:loc,orderNumber:ordno,orderDate:orddate,debtor:debtor,amountGiven:amt,accountNumber:accno,termMonths:mo,dateGiven:date,amount:amt,collateralType:coltype,landedProp:lpObj,motorVehicle:mvObj,consent:consent,clientSig:clientSig,repSig:repSig,notes:notes,status:'pending',submittedBy:cu.username,submittedByName:cu.display,createdAt:now_(),adminNote:'',decidedBy:'',decidedAt:''};
@@ -2302,7 +2484,7 @@ function ordView(id){
   h+='<div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">ORDER FINANCING · '+esc(l.id)+'</div>';
   h+='<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:700;">'+esc(l.companyName)+'</div>';
   h+='<div style="font-size:13px;opacity:.75;margin-top:4px;">'+esc(l.contact)+' · '+esc(l.location)+'</div></div>';
-  h+='<div class="sg"><div class="sc"><div class="sl">Order Amount</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div><div class="sc"><div class="sl">Advance (70%)</div><div class="sv" style="font-size:16px;color:var(--blue2);">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Net to Client</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(l.netAmount||l.disbursedAmount)+'</div></div><div class="sc"><div class="sl">Term</div><div class="sv">'+l.termMonths+' month'+(l.termMonths>1?'s':'')+'</div></div><div class="sc"><div class="sl">Status</div><div class="sv" style="color:'+(st==='cleared'?'var(--ok2)':st==='overdue'?'var(--red2)':'var(--blue2)')+';">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue ⚠️':'Active')+'</div></div></div>';
+  h+='<div class="sg"><div class="sc"><div class="sl">Order Total</div><div class="sv" style="font-size:16px;">'+zmw(l.amountGiven)+'</div></div>'+(l.financedAmount&&l.financedAmount>0&&l.financedAmount<l.amountGiven?'<div class="sc" style="border-top-color:var(--warn)"><div class="sl">Financed Amount</div><div class="sv" style="font-size:14px;color:var(--warn);">'+zmw(l.financedAmount)+'</div></div>':'')+'<div class="sc"><div class="sl">Advance (70%)</div><div class="sv" style="font-size:16px;color:var(--blue2);">'+zmw(l.disbursedAmount)+'</div><div class="ss">Svc: '+zmw(l.serviceCharge)+'</div></div><div class="sc"><div class="sl">Net to Client</div><div class="sv" style="font-size:16px;color:var(--gold);">'+zmw(l.netAmount||l.disbursedAmount)+'</div></div><div class="sc"><div class="sl">Term</div><div class="sv">'+l.termMonths+' month'+(l.termMonths>1?'s':'')+'</div></div><div class="sc"><div class="sl">Status</div><div class="sv" style="color:'+(st==='cleared'?'var(--ok2)':st==='overdue'?'var(--red2)':'var(--blue2)')+';">'+(st==='cleared'?'Cleared ✓':st==='overdue'?'Overdue ⚠️':'Active')+'</div></div></div>';
   h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📋 Order Details (Schedule A)</span></div><div class="cdb">';
   h+='<div class="rm"><span class="rml">Order Number</span><span class="rmv">'+esc(l.orderNumber||'—')+'</span></div>';
   h+='<div class="rm"><span class="rml">Order Date</span><span class="rmv">'+fmtD(l.orderDate||'')+'</span></div>';
@@ -2334,16 +2516,21 @@ function ordView(id){
     h+='</div></div>';
   }
   var today=td_();
-  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Monthly Repayment Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Balance</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';
+  h+='<div class="cd" style="margin-bottom:12px;"><div class="cdh"><span class="cdt">📅 Monthly Repayment Schedule</span></div><div class="tw"><table><thead><tr><th>Month</th><th>Due Date</th><th>Amount Due</th><th>Paid</th><th>Balance</th><th>Daily Penalty</th><th>Total Now Due</th><th>Status</th>'+(canManage()?'<th>Action</th>':'')+'</tr></thead><tbody>';
   (l.months||[]).forEach(function(p,i){
     var ps=p.amountPaid>=(p.amountDue-1)?'paid':today>p.dueDate?'overdue':'pending';
     var bal=Math.max(0,p.amountDue-(p.amountPaid||0));
-    h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-family:monospace;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td><td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>';
+    var pen=ps==='overdue'?calcOverduePenalty(p.dueDate,bal):0;
+    var totalNow=Math.round((bal+pen)*100)/100;
+    h+='<tr><td style="font-weight:700;">Month '+p.month+'</td><td style="font-size:12px;color:'+(ps==='overdue'?'var(--red2)':'var(--text)')+';">'+fmtD(p.dueDate)+'</td><td style="font-family:monospace;">'+zmw(p.amountDue)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.amountPaid||0)+'</td><td style="font-family:monospace;color:'+(bal>0?'var(--red2)':'var(--ok2)')+';">'+zmw(bal)+'</td>';
+    if(ps==='overdue'){var pb=penaltyBreakdown(p.dueDate,bal);h+='<td style="font-family:monospace;color:var(--red2);font-size:11px;">'+zmw(pen)+'<div style="font-size:9px;color:var(--muted);">'+pb.days+' days × '+(INV_ORD_DAILY_RATE*100).toFixed(4)+'%</div></td><td style="font-family:monospace;font-weight:700;color:var(--red2);">'+zmw(totalNow)+'</td>';}else{h+='<td style="color:var(--muted);font-size:11px;">—</td><td style="font-family:monospace;">'+zmw(bal)+'</td>';}
+    h+='<td><span class="bg '+(ps==='paid'?'bgg':ps==='overdue'?'bgr':'bgx')+'">'+(ps==='paid'?'Paid ✓':ps==='overdue'?'Overdue':'Pending')+'</span></td>';
     if(canManage())h+='<td>'+(ps!=='paid'?'<button class="ab" style="color:var(--ok2);border-color:var(--ok2);" onclick="ordRecordPay(\''+id+'\','+i+')">Record</button>':'<button class="ab" onclick="ordUndoPay(\''+id+'\','+i+')">Undo</button>')+'</td>';
     h+='</tr>';
   });
   h+='</tbody></table></div></div>';
   if(l.photos&&l.photos.length){h+=_photoDisplayHtml(l.photos);}
+  h+=_docDisplayHtml(l.docs||{});
   mc.innerHTML=h;
 }
 function printOrdAgreement(id,l,templateMode){
@@ -2419,7 +2606,7 @@ function printOrdAgreement(id,l,templateMode){
   if(templateMode)html+='<script>window.addEventListener(\'load\',function(){toggleEdit();});<\/script>';
   w.document.write(html);w.document.close();
 }
-function ordRecordPay(id,i){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i],def=Math.max(0,p.amountDue-(p.amountPaid||0));var s=prompt('Month '+p.month+' balance: '+zmw(def)+'\nEnter amount:',def);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=td_();var all=true;for(var j=0;j<l.months.length;j++)if(l.months[j].amountPaid<l.months[j].amountDue-1){all=false;break;}if(all)l.status='cleared';_markDirty('ord',l.id);logAct('Order pay — '+l.companyName+' M'+p.month+' — '+zmw(amt));save();toast('Payment recorded!');ordView(id);}
+function ordRecordPay(id,i){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i],bal=Math.max(0,p.amountDue-(p.amountPaid||0));var today=td_();var pen=today>p.dueDate?calcOverduePenalty(p.dueDate,bal):0;var totalNow=Math.round((bal+pen)*100)/100;var pb=pen>0?penaltyBreakdown(p.dueDate,bal):null;var msg='Month '+p.month+' — '+l.companyName+'\nOriginal balance: '+zmw(bal);if(pen>0)msg+='\n⚠ Daily penalty ('+pb.days+' days @ '+(INV_ORD_DAILY_RATE*100).toFixed(4)+'%/day): +'+zmw(pen)+'\nTOTAL NOW DUE: '+zmw(totalNow);msg+='\n\nEnter amount received:';var s=prompt(msg,totalNow);if(s===null)return;var amt=parseFloat(s)||0;if(amt<=0){toast('Enter valid amount.');return;}p.amountPaid=(p.amountPaid||0)+amt;p.datePaid=today;if(pen>0)p.penaltyCollected=(p.penaltyCollected||0)+Math.min(pen,Math.max(0,amt-bal));var all=true;for(var j=0;j<l.months.length;j++)if(l.months[j].amountPaid<l.months[j].amountDue-1){all=false;break;}if(all)l.status='cleared';_markDirty('ord',l.id);logAct('Order pay — '+l.companyName+' M'+p.month+' — '+zmw(amt)+(pen>0?' (incl. '+zmw(pen)+' penalty)':''));save();toast('Payment recorded!');ordView(id);}
 function ordUndoPay(id,i){var l=orderLoans.filter(function(x){return x.id===id;})[0];if(!l)return;var p=l.months[i];if(!confirm('Undo?'))return;p.amountPaid=0;p.datePaid=null;if(l.status==='cleared')l.status='active';_markDirty('ord',l.id);save();toast('Undone.');ordView(id);}
 
 // ===== SALARY ADVANCE =====
@@ -2472,81 +2659,249 @@ function renderReports(mc){
   var customFrom=window._rptFrom||'';
   var customTo=window._rptTo||'';
 
-  // Calculate date range
+  // Date range helpers
   function getRange(){
     var now=new Date(today+'T00:00:00');
-    if(period==='week'){var d=new Date(now);d.setDate(d.getDate()-7);return {from:d.toISOString().substring(0,10),to:today};}
-    if(period==='month'){var d=new Date(now);d.setMonth(d.getMonth()-1);return {from:d.toISOString().substring(0,10),to:today};}
-    if(period==='quarter'){var d=new Date(now);d.setMonth(d.getMonth()-3);return {from:d.toISOString().substring(0,10),to:today};}
-    if(period==='annual'){var d=new Date(now);d.setFullYear(d.getFullYear()-1);return {from:d.toISOString().substring(0,10),to:today};}
-    if(period==='custom')return {from:customFrom,to:customTo};
-    return {from:'',to:''};
+    if(period==='week'){var d=new Date(now);d.setDate(d.getDate()-7);return{from:d.toISOString().substring(0,10),to:today};}
+    if(period==='month'){var d=new Date(now);d.setMonth(d.getMonth()-1);return{from:d.toISOString().substring(0,10),to:today};}
+    if(period==='quarter'){var d=new Date(now);d.setMonth(d.getMonth()-3);return{from:d.toISOString().substring(0,10),to:today};}
+    if(period==='annual'){var d=new Date(now);d.setFullYear(d.getFullYear()-1);return{from:d.toISOString().substring(0,10),to:today};}
+    if(period==='custom')return{from:customFrom,to:customTo};
+    return{from:'',to:''};
   }
   var range=getRange();
+  function inRange(d){if(!range.from&&!range.to)return true;if(!d)return false;var s=d.substring(0,10);if(range.from&&s<range.from)return false;if(range.to&&s>range.to)return false;return true;}
 
-  function inRange(dateStr){
-    if(!range.from&&!range.to)return true;
-    if(!dateStr)return false;
-    var d=dateStr.substring(0,10);
-    if(range.from&&d<range.from)return false;
-    if(range.to&&d>range.to)return false;
-    return true;
+  // Current calendar week (Mon–Sun) and current calendar month
+  function getWeekRange(){
+    var d=new Date(today+'T00:00:00');
+    var day=d.getDay()||7; // Mon=1..Sun=7
+    var mon=new Date(d);mon.setDate(d.getDate()-day+1);
+    var sun=new Date(mon);sun.setDate(mon.getDate()+6);
+    return{from:mon.toISOString().substring(0,10),to:sun.toISOString().substring(0,10)};
   }
+  function getMonthRange(){
+    var d=new Date(today+'T00:00:00');
+    var first=new Date(d.getFullYear(),d.getMonth(),1);
+    var last=new Date(d.getFullYear(),d.getMonth()+1,0);
+    return{from:first.toISOString().substring(0,10),to:last.toISOString().substring(0,10)};
+  }
+  var weekRange=getWeekRange();
+  var monthRange=getMonthRange();
+  function inWeek(d){if(!d)return false;var s=d.substring(0,10);return s>=weekRange.from&&s<=weekRange.to;}
+  function inMonth(d){if(!d)return false;var s=d.substring(0,10);return s>=monthRange.from&&s<=monthRange.to;}
 
-  // Filter loans by date given
+  // Filter by selected period
   var ilArr=instantLoans.filter(function(l){return inRange(l.dateGiven);});
   var ltArr=longTermLoans.filter(function(l){return inRange(l.dateGiven);});
   var invArr=invoiceLoans.filter(function(l){return inRange(l.dateGiven);});
   var ordArr=orderLoans.filter(function(l){return inRange(l.dateGiven);});
   var allEmps=[];salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){if(inRange(e.dateGiven))allEmps.push(e);});});
 
-  function gs(arr,stFn,balFn,paidFn){var s={n:0,active:0,ov:0,cl:0,out:0,paid:0,bal:0};arr.forEach(function(l){var st=stFn(l);s.n++;if(st==='active')s.active++;else if(st==='overdue'||st.indexOf('overdue')>=0)s.ov++;else if(st==='cleared')s.cl++;s.out+=(l.disbursedAmount||l.amountGiven||0);s.paid+=paidFn(l);s.bal+=balFn(l);});return s;}
-  var ilS=gs(ilArr,ilStatus,function(l){return Math.max(0,ilTotalDue(l)-(l.settledAmount||0));},function(l){return l.settledAmount||0;});
-  var ltS=gs(ltArr,ltStatus,ltBalance,ltTotalPaid);
-  var invS=gs(invArr,invStatus,invBalance,function(l){var t=0;(l.months||[]).forEach(function(m){t+=(m.amountPaid||0);});return t;});
-  var ordS=gs(ordArr,function(l){return invStatus({status:l.status,months:l.months});},function(l){var t=0;(l.months||[]).forEach(function(m){t+=Math.max(0,m.amountDue-(m.amountPaid||0));});return t;},function(l){var t=0;(l.months||[]).forEach(function(m){t+=(m.amountPaid||0);});return t;});
-  var salS=gs(allEmps,empStatus,empBalance,empTotalPaid);
-  var grand={n:0,active:0,ov:0,cl:0,out:0,paid:0,bal:0};
-  [ilS,ltS,invS,ordS,salS].forEach(function(s){grand.n+=s.n;grand.active+=s.active;grand.ov+=s.ov;grand.cl+=s.cl;grand.out+=s.out;grand.paid+=s.paid;grand.bal+=s.bal;});
+  // Stats aggregator
+  function gs(arr,stFn,balFn,paidFn,expProfitFn,disbFn){
+    var s={n:0,active:0,ov:0,cl:0,out:0,paid:0,bal:0,expProfit:0,disb:0};
+    arr.forEach(function(l){
+      var st=stFn(l);s.n++;
+      if(st==='active')s.active++;else if(st==='overdue'||st.indexOf('overdue')>=0)s.ov++;else if(st==='cleared')s.cl++;
+      s.out+=(l.disbursedAmount||l.amountGiven||0);
+      s.paid+=paidFn(l);s.bal+=balFn(l);
+      s.expProfit+=expProfitFn?expProfitFn(l):0;
+      s.disb+=disbFn?disbFn(l):(l.disbursedAmount||0);
+    });
+    return s;
+  }
+
+  // Expected profit = total interest/fees that WILL be earned on active loans
+  function ilExpProfit(l){return l.status==='active'?Math.max(0,ilTotalDue(l)-l.amountGiven):0;}
+  function ltExpProfit(l){return ltStatus(l)==='active'?(l.totalInterest||0)+(l.serviceCharge||0):0;}
+  function invExpProfit(l){var tot=0;(l.months||[]).forEach(function(m){tot+=m.amountDue;});return invStatus(l)!=='cleared'?Math.max(0,tot-(l.disbursedAmount||0)):0;}
+  function ordExpProfit(l){var tot=0;(l.months||[]).forEach(function(m){tot+=m.amountDue;});return invStatus({status:l.status,months:l.months})!=='cleared'?Math.max(0,tot-(l.disbursedAmount||0)):0;}
+  function empExpProfit(e){return empStatus(e)==='active'?(e.totalInterest||0)+(e.serviceCharge||0):0;}
+
+  var ilS=gs(ilArr,ilStatus,function(l){return Math.max(0,ilTotalDue(l)-(l.settledAmount||0));},function(l){return l.settledAmount||0;},ilExpProfit);
+  var ltS=gs(ltArr,ltStatus,ltBalance,ltTotalPaid,ltExpProfit);
+  var invS=gs(invArr,invStatus,invBalance,function(l){var t=0;(l.months||[]).forEach(function(m){t+=(m.amountPaid||0);});return t;},invExpProfit);
+  var ordS=gs(ordArr,function(l){return invStatus({status:l.status,months:l.months});},function(l){var t=0;(l.months||[]).forEach(function(m){t+=Math.max(0,m.amountDue-(m.amountPaid||0));});return t;},function(l){var t=0;(l.months||[]).forEach(function(m){t+=(m.amountPaid||0);});return t;},ordExpProfit);
+  var salS=gs(allEmps,empStatus,empBalance,empTotalPaid,empExpProfit);
+
+  var grand={n:0,active:0,ov:0,cl:0,out:0,paid:0,bal:0,expProfit:0,disb:0};
+  [ilS,ltS,invS,ordS,salS].forEach(function(s){grand.n+=s.n;grand.active+=s.active;grand.ov+=s.ov;grand.cl+=s.cl;grand.out+=s.out;grand.paid+=s.paid;grand.bal+=s.bal;grand.expProfit+=s.expProfit;grand.disb+=s.disb;});
+
+  // ── CUMULATIVE (ALL TIME) totals for accumulative balance ─────────────────
+  var cumDisb=0,cumPaid=0,cumBal=0;
+  instantLoans.forEach(function(l){cumDisb+=(l.disbursedAmount||l.amountGiven||0);cumPaid+=(l.settledAmount||0);cumBal+=Math.max(0,ilTotalDue(l)-(l.settledAmount||0));});
+  longTermLoans.forEach(function(l){cumDisb+=(l.disbursedAmount||0);cumPaid+=ltTotalPaid(l);cumBal+=ltBalance(l);});
+  invoiceLoans.forEach(function(l){cumDisb+=(l.disbursedAmount||0);var p=0;(l.months||[]).forEach(function(m){p+=(m.amountPaid||0);});cumPaid+=p;cumBal+=invBalance(l);});
+  orderLoans.forEach(function(l){cumDisb+=(l.disbursedAmount||0);var p=0;(l.months||[]).forEach(function(m){p+=(m.amountPaid||0);});cumPaid+=p;var b=0;(l.months||[]).forEach(function(m){b+=Math.max(0,m.amountDue-(m.amountPaid||0));});cumBal+=b;});
+  salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){cumDisb+=(e.disbursedAmount||0);cumPaid+=empTotalPaid(e);cumBal+=empBalance(e);});});
+
+  // ── WEEKLY summary ────────────────────────────────────────────────────────
+  var wkDisp=0,wkReturned=0,wkProfit=0;
+  function sumWeek(arr,disbFn,paidFn,profitFn){
+    arr.forEach(function(l){if(inWeek(l.dateGiven))wkDisp+=disbFn(l);});
+    arr.forEach(function(l){
+      var pmts=l.months||l.payments||[];
+      pmts.forEach(function(p){if(p.datePaid&&inWeek(p.datePaid)){wkReturned+=(p.amountPaid||0);wkProfit+=profitFn?profitFn(p,l):0;}});
+    });
+  }
+  // IL: settled this week
+  instantLoans.forEach(function(l){
+    if(l.settledDate&&inWeek(l.settledDate)){wkReturned+=(l.settledAmount||0);wkProfit+=Math.max(0,(l.settledAmount||0)-l.amountGiven);}
+    if(inWeek(l.dateGiven))wkDisp+=(l.disbursedAmount||l.amountGiven||0);
+  });
+  longTermLoans.forEach(function(l){
+    if(inWeek(l.dateGiven))wkDisp+=(l.disbursedAmount||0);
+    (l.payments||[]).forEach(function(p){if(p.datePaid&&inWeek(p.datePaid)){wkReturned+=(p.amountPaid||0);}});
+  });
+  invoiceLoans.forEach(function(l){
+    if(inWeek(l.dateGiven))wkDisp+=(l.disbursedAmount||0);
+    (l.months||[]).forEach(function(m){if(m.datePaid&&inWeek(m.datePaid)){wkReturned+=(m.amountPaid||0);}});
+  });
+  orderLoans.forEach(function(l){
+    if(inWeek(l.dateGiven))wkDisp+=(l.disbursedAmount||0);
+    (l.months||[]).forEach(function(m){if(m.datePaid&&inWeek(m.datePaid)){wkReturned+=(m.amountPaid||0);}});
+  });
+  salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){
+    if(inWeek(e.dateGiven))wkDisp+=(e.disbursedAmount||0);
+    (e.payments||[]).forEach(function(p){if(p.datePaid&&inWeek(p.datePaid)){wkReturned+=(p.amountPaid||0);}});
+  });});
+  // Rough weekly expected profit = interest earned on disbursed this week
+  var wkExpProfit=Math.round(wkDisp*0.05*100)/100; // conservative estimate using 5% avg
+  var wkRemBal=Math.round((wkDisp-wkReturned)*100)/100;
+
+  // ── MONTHLY summary ───────────────────────────────────────────────────────
+  var moDisp=0,moReturned=0;
+  instantLoans.forEach(function(l){
+    if(l.settledDate&&inMonth(l.settledDate))moReturned+=(l.settledAmount||0);
+    if(inMonth(l.dateGiven))moDisp+=(l.disbursedAmount||l.amountGiven||0);
+  });
+  longTermLoans.forEach(function(l){
+    if(inMonth(l.dateGiven))moDisp+=(l.disbursedAmount||0);
+    (l.payments||[]).forEach(function(p){if(p.datePaid&&inMonth(p.datePaid))moReturned+=(p.amountPaid||0);});
+  });
+  invoiceLoans.forEach(function(l){
+    if(inMonth(l.dateGiven))moDisp+=(l.disbursedAmount||0);
+    (l.months||[]).forEach(function(m){if(m.datePaid&&inMonth(m.datePaid))moReturned+=(m.amountPaid||0);});
+  });
+  orderLoans.forEach(function(l){
+    if(inMonth(l.dateGiven))moDisp+=(l.disbursedAmount||0);
+    (l.months||[]).forEach(function(m){if(m.datePaid&&inMonth(m.datePaid))moReturned+=(m.amountPaid||0);});
+  });
+  salaryLoans.forEach(function(co){(co.employees||[]).forEach(function(e){
+    if(inMonth(e.dateGiven))moDisp+=(e.disbursedAmount||0);
+    (e.payments||[]).forEach(function(p){if(p.datePaid&&inMonth(p.datePaid))moReturned+=(p.amountPaid||0);});
+  });});
+  var moExpProfit=Math.round(moDisp*0.05*100)/100;
+  var moRemBal=Math.round((moDisp-moReturned)*100)/100;
 
   var periodLabel=period==='week'?'Last 7 Days':period==='month'?'Last 30 Days':period==='quarter'?'Last 3 Months':period==='annual'?'Last 12 Months':period==='custom'?'Custom Range':'All Time';
 
+  // ── BUILD HTML ────────────────────────────────────────────────────────────
   var h='<div class="pgh" style="background:linear-gradient(135deg,#0d0d0d,#1a1208);border:1px solid rgba(201,168,76,.2);">';
-  h+='<div><div class="pgt">📊 Reports</div><div class="pgs">'+periodLabel+(range.from?' · '+fmtD(range.from)+' to '+fmtD(range.to):'')+'</div></div>';
-  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btg" onclick="exportReport()">⬇ Export CSV</button><button class="btn bto" onclick="exportClientList()">📋 Export Clients</button><button class="btn bto" onclick="openImportModal()" style="border-color:var(--ok2);color:var(--ok2);">📥 Import from Excel</button><button class="btn bto" onclick="window.print()">🖨 Print</button></div></div>';
+  h+='<div><div class="pgt">📊 Reports & Analytics</div><div class="pgs">'+periodLabel+(range.from?' · '+fmtD(range.from)+' to '+fmtD(range.to):'')+'</div></div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btg" onclick="exportReport()">⬇ Export CSV</button><button class="btn bto" onclick="exportClientList()">📋 Export Clients</button><button class="btn bto" onclick="openImportModal()" style="border-color:var(--ok2);color:var(--ok2);">📥 Import</button><button class="btn bto" onclick="window.print()">🖨 Print</button></div></div>';
 
   // Period selector
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">';
   [['all','All Time'],['week','This Week'],['month','This Month'],['quarter','Quarter'],['annual','Annual']].forEach(function(f){var a=period===f[0];h+='<button onclick="window._rptPeriod=\''+f[0]+'\';renderReports(document.getElementById(\'mainct\'))" style="padding:6px 14px;border-radius:20px;border:1.5px solid '+(a?'var(--gold)':'var(--border)')+';background:'+(a?'rgba(201,168,76,.15)':'transparent')+';color:'+(a?'var(--gold)':'var(--muted)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:\'DM Sans\',sans-serif;">'+f[1]+'</button>';});
-  h+='<button onclick="window._rptPeriod=\'custom\';renderReports(document.getElementById(\'mainct\'))" style="padding:6px 14px;border-radius:20px;border:1.5px solid '+(period==='custom'?'var(--gold)':'var(--border)')+';background:'+(period==='custom'?'rgba(201,168,76,.15)':'transparent')+';color:'+(period==='custom'?'var(--gold)':'var(--muted)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:\'DM Sans\',sans-serif;">Custom Range</button>';
+  h+='<button onclick="window._rptPeriod=\'custom\';renderReports(document.getElementById(\'mainct\'))" style="padding:6px 14px;border-radius:20px;border:1.5px solid '+(period==='custom'?'var(--gold)':'var(--border)')+';background:'+(period==='custom'?'rgba(201,168,76,.15)':'transparent')+';color:'+(period==='custom'?'var(--gold)':'var(--muted)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:\'DM Sans\',sans-serif;">Custom</button>';
   if(period==='custom'){h+='<input type="date" value="'+customFrom+'" onchange="window._rptFrom=this.value;renderReports(document.getElementById(\'mainct\'))" style="padding:6px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:12px;background:var(--dark3);color:var(--text);">';h+='<span style="color:var(--muted);font-size:12px;">to</span><input type="date" value="'+customTo+'" onchange="window._rptTo=this.value;renderReports(document.getElementById(\'mainct\'))" style="padding:6px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:12px;background:var(--dark3);color:var(--text);">';}
   h+='</div>';
 
-  h+='<div class="sg"><div class="sc"><div class="si">📋</div><div class="sl">Total Loans</div><div class="sv">'+grand.n+'</div></div><div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Active</div><div class="sv" style="color:var(--ok2)">'+grand.active+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+grand.ov+'</div></div><div class="sc" style="border-top-color:var(--gold)"><div class="si">💰</div><div class="sl">Disbursed</div><div class="sv" style="font-size:13px;color:var(--gold);">'+zmw(grand.out)+'</div></div><div class="sc"><div class="si">💵</div><div class="sl">Collected</div><div class="sv" style="font-size:13px;color:var(--ok2);">'+zmw(grand.paid)+'</div></div><div class="sc" style="border-top-color:var(--red2)"><div class="si">📊</div><div class="sl">Balance Due</div><div class="sv" style="font-size:13px;color:var(--red2);">'+zmw(grand.bal)+'</div></div></div>';
+  // ── KPI scorecards ────────────────────────────────────────────────────────
+  h+='<div class="sg">';
+  h+='<div class="sc"><div class="si">📋</div><div class="sl">Total Loans</div><div class="sv">'+grand.n+'</div></div>';
+  h+='<div class="sc" style="border-top-color:var(--ok2)"><div class="si">✓</div><div class="sl">Active</div><div class="sv" style="color:var(--ok2)">'+grand.active+'</div></div>';
+  h+='<div class="sc" style="border-top-color:var(--red2)"><div class="si">⚠️</div><div class="sl">Overdue</div><div class="sv" style="color:var(--red2)">'+grand.ov+'</div></div>';
+  h+='<div class="sc"><div class="si">💰</div><div class="sl">Disbursed</div><div class="sv" style="font-size:13px;color:var(--gold);">'+zmw(grand.out)+'</div></div>';
+  h+='<div class="sc"><div class="si">💵</div><div class="sl">Collected</div><div class="sv" style="font-size:13px;color:var(--ok2);">'+zmw(grand.paid)+'</div></div>';
+  h+='<div class="sc" style="border-top-color:var(--red2)"><div class="si">📊</div><div class="sl">Balance Due</div><div class="sv" style="font-size:13px;color:var(--red2);">'+zmw(grand.bal)+'</div></div>';
+  h+='<div class="sc" style="border-top-color:var(--gold)"><div class="si">📈</div><div class="sl">Expected Profit</div><div class="sv" style="font-size:13px;color:var(--gold);">'+zmw(grand.expProfit)+'</div></div>';
+  h+='<div class="sc" style="border-top-color:#9b59b6"><div class="si">🏦</div><div class="sl">Accumulative Balance</div><div class="sv" style="font-size:12px;color:#9b59b6;">'+zmw(cumBal)+'</div></div>';
+  h+='</div>';
 
-  h+='<div class="cd" style="margin-bottom:16px;"><div class="cdh"><span class="cdt">Product Breakdown</span></div><div class="tw"><table><thead><tr><th>Product</th><th>Loans</th><th>Active</th><th>Overdue</th><th>Cleared</th><th>Disbursed</th><th>Collected</th><th>Balance</th></tr></thead><tbody>';
-  var prods=[{n:'⚡ Instant Loans',s:ilS,c:'var(--blue2)'},{n:'💼 Long Term',s:ltS,c:'var(--ok2)'},{n:'📄 Invoice Disc.',s:invS,c:'#9b59b6'},{n:'📦 Order Finance',s:ordS,c:'#8e44ad'},{n:'👤 Salary Advance',s:salS,c:'var(--warn)'}];
-  prods.forEach(function(p){h+='<tr><td style="font-weight:700;color:'+p.c+';">'+p.n+'</td><td style="text-align:center;font-weight:700;">'+p.s.n+'</td><td style="text-align:center;"><span class="bg bgg">'+p.s.active+'</span></td><td style="text-align:center;"><span class="bg bgr">'+p.s.ov+'</span></td><td style="text-align:center;"><span class="bg bgb">'+p.s.cl+'</span></td><td style="font-family:monospace;">'+zmw(p.s.out)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.s.paid)+'</td><td style="font-family:monospace;color:var(--red2);font-weight:700;">'+zmw(p.s.bal)+'</td></tr>';});
-  h+='<tr style="background:rgba(201,168,76,.05);font-weight:700;border-top:1px solid var(--border);"><td style="color:var(--gold);">TOTAL</td><td style="text-align:center;">'+grand.n+'</td><td style="text-align:center;color:var(--ok2);">'+grand.active+'</td><td style="text-align:center;color:var(--red2);">'+grand.ov+'</td><td style="text-align:center;">'+grand.cl+'</td><td style="font-family:monospace;">'+zmw(grand.out)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(grand.paid)+'</td><td style="font-family:monospace;color:var(--red2);">'+zmw(grand.bal)+'</td></tr>';
+  // ── WEEKLY SUMMARY (matches Excel format) ─────────────────────────────────
+  var wkFrom=weekRange.from,wkTo=weekRange.to;
+  h+='<div class="cd" style="margin-bottom:16px;border-top:3px solid var(--gold);">';
+  h+='<div class="cdh"><span class="cdt">📅 Weekly Summary</span><span style="font-size:11px;color:var(--muted);margin-left:8px;">'+fmtD(wkFrom)+' – '+fmtD(wkTo)+'</span></div>';
+  h+='<div class="tw"><table><thead><tr><th style="width:200px;">Metric</th><th>This Week</th></tr></thead><tbody>';
+  [
+    ['Returned (Collected)',zmw(wkReturned),'var(--ok2)'],
+    ['Profit',zmw(Math.round(Math.max(0,wkReturned*0.3)*100)/100),'var(--gold)'],
+    ['Total Collected',zmw(wkReturned),'var(--ok2)'],
+    ['Dispersed This Week',zmw(wkDisp),'var(--blue2)'],
+    ['Expected Profit',zmw(wkExpProfit),'var(--gold)'],
+    ['Remaining Balance',zmw(Math.max(0,wkRemBal)),'var(--red2)']
+  ].forEach(function(row){
+    h+='<tr><td style="font-weight:600;">'+row[0]+'</td><td style="font-family:monospace;font-weight:700;color:'+row[2]+';">'+row[1]+'</td></tr>';
+  });
   h+='</tbody></table></div></div>';
 
-  // Client Payment History Search
+  // ── MONTHLY SUMMARY ───────────────────────────────────────────────────────
+  var moLabel=new Date(today+'T00:00:00').toLocaleString('en-ZM',{month:'long',year:'numeric'});
+  h+='<div class="cd" style="margin-bottom:16px;border-top:3px solid #9b59b6;">';
+  h+='<div class="cdh"><span class="cdt">📆 Monthly Summary</span><span style="font-size:11px;color:var(--muted);margin-left:8px;">'+moLabel+'</span></div>';
+  h+='<div class="tw"><table><thead><tr><th style="width:200px;">Metric</th><th>This Month</th></tr></thead><tbody>';
+  [
+    ['Returned (Collected)',zmw(moReturned),'var(--ok2)'],
+    ['Profit',zmw(Math.round(Math.max(0,moReturned*0.3)*100)/100),'var(--gold)'],
+    ['Total Collected',zmw(moReturned),'var(--ok2)'],
+    ['Dispersed This Month',zmw(moDisp),'var(--blue2)'],
+    ['Expected Profit',zmw(moExpProfit),'var(--gold)'],
+    ['Remaining Balance',zmw(Math.max(0,moRemBal)),'var(--red2)']
+  ].forEach(function(row){
+    h+='<tr><td style="font-weight:600;">'+row[0]+'</td><td style="font-family:monospace;font-weight:700;color:'+row[2]+';">'+row[1]+'</td></tr>';
+  });
+  h+='</tbody></table></div></div>';
+
+  // ── ACCUMULATIVE BALANCE ──────────────────────────────────────────────────
+  h+='<div class="cd" style="margin-bottom:16px;border-top:3px solid #9b59b6;">';
+  h+='<div class="cdh"><span class="cdt">🏦 Accumulative Portfolio Balance (All Time)</span></div>';
+  h+='<div class="sg">';
+  h+='<div class="sc"><div class="sl">Total Ever Disbursed</div><div class="sv" style="color:var(--gold);font-size:14px;">'+zmw(cumDisb)+'</div></div>';
+  h+='<div class="sc"><div class="sl">Total Ever Collected</div><div class="sv" style="color:var(--ok2);font-size:14px;">'+zmw(cumPaid)+'</div></div>';
+  h+='<div class="sc"><div class="sl">Outstanding Balance</div><div class="sv" style="color:var(--red2);font-size:14px;">'+zmw(cumBal)+'</div></div>';
+  h+='<div class="sc"><div class="sl">Collection Rate</div><div class="sv" style="color:#9b59b6;font-size:14px;">'+(cumDisb>0?Math.round(cumPaid/cumDisb*100)+'%':'—')+'</div></div>';
+  h+='</div></div>';
+
+  // ── PRODUCT BREAKDOWN ─────────────────────────────────────────────────────
+  h+='<div class="cd" style="margin-bottom:16px;"><div class="cdh"><span class="cdt">Product Breakdown ('+periodLabel+')</span></div><div class="tw"><table><thead><tr><th>Product</th><th>Loans</th><th>Active</th><th>Overdue</th><th>Cleared</th><th>Disbursed</th><th>Collected</th><th>Balance</th><th>Exp. Profit</th></tr></thead><tbody>';
+  var prods=[
+    {n:'⚡ Instant Loans',s:ilS,c:'var(--blue2)'},
+    {n:'💼 Long Term',s:ltS,c:'var(--ok2)'},
+    {n:'📄 Invoice Disc.',s:invS,c:'#9b59b6'},
+    {n:'📦 Order Finance',s:ordS,c:'#8e44ad'},
+    {n:'👤 Salary Advance',s:salS,c:'var(--warn)'}
+  ];
+  prods.forEach(function(p){
+    h+='<tr><td style="font-weight:700;color:'+p.c+';">'+p.n+'</td><td style="text-align:center;font-weight:700;">'+p.s.n+'</td><td style="text-align:center;"><span class="bg bgg">'+p.s.active+'</span></td><td style="text-align:center;"><span class="bg bgr">'+p.s.ov+'</span></td><td style="text-align:center;"><span class="bg bgb">'+p.s.cl+'</span></td><td style="font-family:monospace;">'+zmw(p.s.out)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(p.s.paid)+'</td><td style="font-family:monospace;color:var(--red2);font-weight:700;">'+zmw(p.s.bal)+'</td><td style="font-family:monospace;color:var(--gold);">'+zmw(p.s.expProfit)+'</td></tr>';
+  });
+  h+='<tr style="background:rgba(201,168,76,.05);font-weight:700;border-top:1px solid var(--border);"><td style="color:var(--gold);">TOTAL</td><td style="text-align:center;">'+grand.n+'</td><td style="text-align:center;color:var(--ok2);">'+grand.active+'</td><td style="text-align:center;color:var(--red2);">'+grand.ov+'</td><td style="text-align:center;">'+grand.cl+'</td><td style="font-family:monospace;">'+zmw(grand.out)+'</td><td style="font-family:monospace;color:var(--ok2);">'+zmw(grand.paid)+'</td><td style="font-family:monospace;color:var(--red2);">'+zmw(grand.bal)+'</td><td style="font-family:monospace;color:var(--gold);">'+zmw(grand.expProfit)+'</td></tr>';
+  h+='</tbody></table></div></div>';
+
+  // ── CLIENT PAYMENT HISTORY SEARCH ─────────────────────────────────────────
   h+='<div class="cd" style="margin-bottom:16px;"><div class="cdh"><span class="cdt">🔍 Client Payment History</span></div><div class="cdb">';
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">';
   h+='<div style="flex:1;min-width:200px;"><label class="fl">Search Client or Company Name</label><input class="fi" id="rpt_search" placeholder="Type name to search..." oninput="rptSearchPayHistory()"></div>';
   h+='</div><div id="rpt_history" style="margin-top:14px;"></div></div></div>';
 
-  // Overdue
+  // ── OVERDUE ACCOUNTS ──────────────────────────────────────────────────────
   var ovList=[];
   ilArr.forEach(function(l){var s=ilStatus(l);if(s.indexOf('overdue')>=0)ovList.push({prod:'⚡ Instant',name:l.clientName,contact:l.clientPhone||'',bal:Math.max(0,ilTotalDue(l)-(l.settledAmount||0)),s:s});});
   ltArr.forEach(function(l){if(ltStatus(l)==='overdue')ovList.push({prod:'💼 LT',name:l.clientName,contact:l.contact||'',bal:ltBalance(l),s:'overdue'});});
   invArr.forEach(function(l){if(invStatus(l)==='overdue')ovList.push({prod:'📄 Invoice',name:l.companyName,contact:l.contact||'',bal:invBalance(l),s:'overdue'});});
   ordArr.forEach(function(l){if(invStatus({status:l.status,months:l.months})==='overdue'){var b=0;(l.months||[]).forEach(function(m){b+=Math.max(0,m.amountDue-(m.amountPaid||0));});ovList.push({prod:'📦 Order',name:l.companyName,contact:l.contact||'',bal:b,s:'overdue'});}});
   allEmps.forEach(function(e){if(empStatus(e)==='overdue')ovList.push({prod:'👤 Salary',name:e.employeeName,contact:e.contact||'',bal:empBalance(e),s:'overdue'});});
-  if(ovList.length){h+='<div class="cd" style="border-top:3px solid var(--red2);"><div class="cdh"><span class="cdt" style="color:var(--red2);">⚠️ Overdue Accounts ('+ovList.length+')</span></div><div class="tw"><table><thead><tr><th>Product</th><th>Client/Company</th><th>Contact</th><th>Balance Due</th><th>Status</th></tr></thead><tbody>';ovList.forEach(function(o){h+='<tr><td style="font-size:12px;font-weight:600;">'+o.prod+'</td><td><strong>'+esc(o.name)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(o.contact)+'</td><td style="font-family:monospace;font-weight:700;color:var(--red2);">'+zmw(o.bal)+'</td><td><span class="bg bgr" style="font-size:9px;">'+(o.s==='overdue_penalty'?'Penalty Applied':o.s==='overdue_cancel'?'Cancel Risk':'Overdue')+'</span></td></tr>';});h+='</tbody></table></div></div>';}
+  if(ovList.length){
+    h+='<div class="cd" style="border-top:3px solid var(--red2);"><div class="cdh"><span class="cdt" style="color:var(--red2);">⚠️ Overdue Accounts ('+ovList.length+')</span></div><div class="tw"><table><thead><tr><th>Product</th><th>Client/Company</th><th>Contact</th><th>Balance Due</th><th>Status</th></tr></thead><tbody>';
+    ovList.forEach(function(o){h+='<tr><td style="font-size:12px;font-weight:600;">'+o.prod+'</td><td><strong>'+esc(o.name)+'</strong></td><td style="font-size:12px;color:var(--muted);">'+esc(o.contact)+'</td><td style="font-family:monospace;font-weight:700;color:var(--red2);">'+zmw(o.bal)+'</td><td><span class="bg bgr" style="font-size:9px;">'+(o.s==='overdue_penalty'?'Penalty Applied':o.s==='overdue_cancel'?'Cancel Risk':'Overdue')+'</span></td></tr>';});
+    h+='</tbody></table></div></div>';
+  }
 
   mc.innerHTML=h;
 }
+
 
 function rptSearchPayHistory(){
   var q=(document.getElementById('rpt_search').value||'').trim().toLowerCase();
